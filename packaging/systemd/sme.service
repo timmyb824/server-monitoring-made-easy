@@ -1,0 +1,14 @@
+[Unit]
+Description=Server Monitoring Made Easy
+After=network.target
+
+[Service]
+Type=simple
+User=sme
+Group=sme
+ExecStart=/usr/local/bin/sme start -c /etc/sme/config.yaml
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

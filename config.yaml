@@ -1,0 +1,59 @@
+# Server Monitoring Made Easy Configuration
+
+monitors:
+  cpu:
+    enabled: true
+    threshold: 80 # Alert when CPU usage > 80%
+    interval: 60 # Check every 60 seconds
+    alert_count: 3 # Alert after 3 consecutive failures
+
+  memory:
+    enabled: true
+    threshold: 90 # Alert when memory usage > 90%
+    interval: 60
+    alert_count: 3 # Alert after 3 consecutive failures
+
+  disk:
+    enabled: true
+    threshold: 85 # Alert when disk is > 85% full
+    interval: 300 # Check every 5 minutes
+    path: "/" # Monitor root partition
+    alert_count: 2 # Alert after 2 consecutive failures (less for disk since it's checked less frequently)
+
+  ping:
+    enabled: true
+    threshold: 200 # Alert when ping > 200ms
+    interval: 60
+    alert_count: 5 # More consecutive checks for network latency due to potential fluctuations
+    targets:
+      - "8.8.8.8" # Google DNS
+      - "1.1.1.1" # Cloudflare DNS
+      - "google.com" # Google
+    timeout: 5 # Ping timeout in seconds
+
+# Configure your notification channels here
+notifications:
+  # Telegram example
+  - type: telegram
+    token: "your-bot-token"
+    chat_id: "your-chat-id"
+
+  # Discord example
+  - type: discord
+    webhook: "your-webhook-url"
+
+  # Slack example
+  #- type: slack
+  #  token: "your-slack-token"
+  #  channel: "#monitoring"
+
+  # Email example
+  #- type: email
+  #  smtp_host: "smtp.gmail.com"
+  #  username: "your-email@gmail.com"
+  #  password: "your-app-password"
+  #  to: "recipient@example.com"
+
+logging:
+  level: DEBUG # Set to DEBUG for more verbose logging
+  file: both # Will log to both stdout and file in container

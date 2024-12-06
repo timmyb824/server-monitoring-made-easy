@@ -1,0 +1,17 @@
+---
+services:
+  monitor:
+    build: .
+    volumes:
+      - ./config.yaml:/etc/sme/config.yaml:ro
+      - ./logs:/var/log/sme
+    tmpfs:
+      - /var/run/sme:uid=999,gid=999 # Use tmpfs for PID file, 999 is typically the sme user ID
+    pid: "host" # Needed for accurate system metrics
+    privileged: true # Needed for system metrics access
+    network_mode: "host" # Needed for accurate network metrics
+    restart: unless-stopped
+    cap_add:
+      - NET_RAW # Needed for ping
+      - NET_ADMIN # Needed for network operations
+    container_name: "sme"
