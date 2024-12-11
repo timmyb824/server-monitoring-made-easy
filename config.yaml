@@ -33,26 +33,20 @@ monitors:
 
 # Configure your notification channels here
 notifications:
-  # Telegram example
-  - type: telegram
-    token: "your-bot-token"
-    chat_id: "your-chat-id"
-
   # Discord example
   - type: discord
-    webhook: "your-webhook-url"
+    uri: "discord://1129993817647501346/Oj_P-S3_1KejI2YOo334JxUW2kI2XdgCMvxGUhl_uS2fG_R2B7K7RBdVIESY4mIx1CDV"
+    enabled: true
 
   # Slack example
-  #- type: slack
-  #  token: "your-slack-token"
-  #  channel: "#monitoring"
+  - type: slack
+    uri: "slack://tokenA/tokenB/tokenC"
+    enabled: false
 
-  # Email example
-  #- type: email
-  #  smtp_host: "smtp.gmail.com"
-  #  username: "your-email@gmail.com"
-  #  password: "your-app-password"
-  #  to: "recipient@example.com"
+  # Telegram example
+  - type: telegram
+    uri: "tgram://bottoken/ChatID"
+    enabled: false
 
 logging:
   level: DEBUG # Set to DEBUG for more verbose logging
