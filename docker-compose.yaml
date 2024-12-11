@@ -1,3 +1,4 @@
+# This compose file is compatible with both Docker and Podman
 ---
 services:
   monitor:
@@ -6,7 +7,7 @@ services:
       - ./config.yaml:/etc/sme/config.yaml:ro
       - ./logs:/var/log/sme
     tmpfs:
-      - /var/run/sme:uid=999,gid=999 # Use tmpfs for PID file, 999 is typically the sme user ID
+      - /var/run/sme # Simple tmpfs mount compatible with both Docker and Podman
     pid: "host" # Needed for accurate system metrics
     privileged: true # Needed for system metrics access
     network_mode: "host" # Needed for accurate network metrics
@@ -15,3 +16,4 @@ services:
       - NET_RAW # Needed for ping
       - NET_ADMIN # Needed for network operations
     container_name: "sme"
+    user: "999:999" # Set container user/group ID for proper permissions
