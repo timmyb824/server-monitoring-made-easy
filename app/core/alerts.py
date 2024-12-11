@@ -29,24 +29,28 @@ class AlertManager:
         notifications = self.config.get("notifications", [])
 
         for notifier in notifications:
-            notifier_type = notifier.get("type")
-            if notifier_type == "telegram":
-                url = f"tgram://{notifier['token']}/{notifier['chat_id']}"
-                self.apprise.add(url)
-            elif notifier_type == "discord":
-                url = f"discord://{notifier['webhook']}"
-                self.apprise.add(url)
-            elif notifier_type == "slack":
-                url = f"slack://{notifier['token']}/{notifier['channel']}"
-                self.apprise.add(url)
-            elif notifier_type == "email":
-                url = (
-                    f"mailto://{notifier['username']}:{notifier['password']}"
-                    f"@{notifier['smtp_host']}?to={notifier['to']}"
+            if not notifier.get("enabled", True):
+                self.logger.debug(
+                    f"Skipping disabled notification type: {notifier.get('type')}"
                 )
-                self.apprise.add(url)
-            else:
-                self.logger.warning(f"Unsupported notification type: {notifier_type}")
+                continue
+
+            uri = notifier.get("uri")
+            if not uri:
+                self.logger.error(
+                    f"Missing URI for notification type: {notifier.get('type')}"
+                )
+                continue
+
+            try:
+                self.apprise.add(uri)
+                self.logger.debug(f"Added notification service: {notifier.get('type')}")
+            except Exception as e:
+                self.logger.error(
+                    "Failed to add notification service",
+                    type=notifier.get("type"),
+                    error=str(e),
+                )
 
     def process_alert(self, alert: dict) -> None:
         """Process an incoming alert.
