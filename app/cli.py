@@ -10,9 +10,9 @@ import daemon
 import structlog
 import yaml
 
-from .config import ConfigManager
-from .core.alerts import AlertManager
-from .core.metrics import CPUMonitor, DiskMonitor, MemoryMonitor, PingMonitor
+from app.config import ConfigManager
+from app.core.alerts import AlertManager
+from app.core.metrics import CPUMonitor, DiskMonitor, MemoryMonitor, PingMonitor
 
 logger = structlog.get_logger()
 
