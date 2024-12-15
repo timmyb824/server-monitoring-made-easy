@@ -143,6 +143,16 @@ app/
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+## Container Support
+
+When running in a container:
+- Full host metrics support is only available on Linux hosts
+- On non-Linux hosts (like macOS), container memory metrics will reflect the VM's memory usage, not the host system
+- The container must be run with the following settings:
+  - `pid: "host"` for accurate system metrics
+  - `/proc:/host/proc:ro` volume mount for host memory metrics
+  - Appropriate capabilities for network monitoring
+
 ## License
 
 MIT License

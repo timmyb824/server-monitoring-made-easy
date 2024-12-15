@@ -6,6 +6,7 @@ services:
     volumes:
       - ./config.yaml:/etc/sme/config.yaml:ro
       - ./logs:/var/log/sme
+      - /proc:/host/proc:ro  # Mount host's proc directory read-only
     tmpfs:
       - /var/run/sme # Simple tmpfs mount compatible with both Docker and Podman
     pid: "host" # Needed for accurate system metrics
@@ -17,3 +18,7 @@ services:
       - NET_ADMIN # Needed for network operations
     container_name: "sme"
     user: "999:999" # Set container user/group ID for proper permissions
+    environment:
+      - CONTAINER=1
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=debug

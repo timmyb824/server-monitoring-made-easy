@@ -9,10 +9,13 @@ import click
 import daemon
 import structlog
 import yaml
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
 
 from app.config import ConfigManager
 from app.core.alerts import AlertManager
-from app.core.metrics import CPUMonitor, DiskMonitor, MemoryMonitor, PingMonitor
+from app.monitors import CPUMonitor, DiskMonitor, MemoryMonitor, PingMonitor
 
 logger = structlog.get_logger()
 
@@ -296,6 +299,48 @@ def alerts():
         click.echo(
             f"Time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(alert['timestamp']))}"
         )
+
+
+@cli.command()
+def metrics():
+    """Display current system metrics."""
+    console = Console()
+
+    # Initialize monitors
+    cpu_monitor = CPUMonitor("cpu", {"threshold": 80})
+    mem_monitor = MemoryMonitor("memory", {"threshold": 80})
+    disk_monitor = DiskMonitor("disk", {"threshold": 80})
+    ping_monitor = PingMonitor("ping", {"threshold": 100})
+
+    # Collect metrics
+    cpu = cpu_monitor.collect()
+    memory = mem_monitor.collect()
+    disk = disk_monitor.collect()
+    ping_results = ping_monitor.collect()
+
+    # Create table
+    table = Table(title="System Metrics", show_header=True, header_style="bold magenta")
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", justify="right", style="green")
+
+    # Add rows
+    table.add_row("CPU Usage", f"{cpu:.1f}%")
+    table.add_row("Memory Usage", f"{memory:.1f}%")
+    table.add_row("Disk Usage", f"{disk:.1f}%")
+
+    # Create ping table
+    ping_table = Table(show_header=True, header_style="bold magenta")
+    ping_table.add_column("Host", style="cyan")
+    ping_table.add_column("Latency", justify="right", style="green")
+
+    for host, latency in ping_results.items():
+        ping_table.add_row(
+            host, f"{latency:.1f}ms" if latency is not None else "Timeout"
+        )
+
+    # Display tables
+    console.print(Panel(table, title="System Resources", border_style="blue"))
+    console.print(Panel(ping_table, title="Network Latency", border_style="blue"))
 
 
 if __name__ == "__main__":

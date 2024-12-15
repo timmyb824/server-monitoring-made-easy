@@ -2,7 +2,7 @@
 
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 import structlog
 
@@ -12,7 +12,7 @@ logger = structlog.get_logger()
 class Monitor(ABC):
     """Base class for all monitors."""
 
-    def __init__(self, name: str, config: Dict[str, Any]):
+    def __init__(self, name: str, config: dict[str, Any]):
         """Initialize the monitor.
 
         Args:
@@ -64,7 +64,7 @@ class Monitor(ABC):
         """Determine if it's time to check the metric again."""
         return time.time() - self.last_check >= self.interval
 
-    def check(self) -> Optional[Dict[str, Any]]:
+    def check(self) -> Optional[dict[str, Any]]:
         """Perform the monitoring check.
 
         Returns:
@@ -135,7 +135,7 @@ class Monitor(ABC):
                 "timestamp": time.time(),
             }
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Get the current status of the monitor.
 
         Returns:

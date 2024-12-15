@@ -1,8 +1,7 @@
 """Configuration management for Server Monitoring Made Easy."""
 
 import os
-from pathlib import Path
-from typing import Dict, Optional
+from typing import Optional
 
 import structlog
 import yaml
@@ -141,7 +140,7 @@ class ConfigManager:
                 config_path=self.config_path,
             )
 
-    def _merge_config(self, base: Dict, override: Dict) -> None:
+    def _merge_config(self, base: dict, override: dict) -> None:
         """Recursively merge override config into base config.
 
         Args:
@@ -201,7 +200,7 @@ class ConfigManager:
             logger.error("Configuration validation failed", error=str(e))
             return False
 
-    def get_config(self) -> Dict:
+    def get_config(self) -> dict:
         """Get the current configuration.
 
         Returns:
