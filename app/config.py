@@ -5,6 +5,20 @@ from typing import Optional
 
 import structlog
 import yaml
+import logging
+
+# Configure initial logging with WARNING level
+logging.basicConfig(level=logging.WARNING)
+structlog.configure(
+    processors=[
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.stdlib.add_log_level,
+        structlog.processors.JSONRenderer(),
+    ],
+    wrapper_class=structlog.stdlib.BoundLogger,
+    context_class=dict,
+    logger_factory=structlog.stdlib.LoggerFactory(),
+)
 
 logger = structlog.get_logger()
 
@@ -44,8 +58,14 @@ DEFAULT_CONFIG = {
     },
     "notifications": [],  # Empty by default, user must configure
     "logging": {
-        "level": "INFO",
+        "level": "warning",  # Default to warning level
         "file": "stdout",  # Default to stdout for container compatibility
+        "components": {  # Component-specific log levels
+            "monitors": "warning",
+            "alerts": "warning",
+            "metrics": "error",
+            "daemon": "warning",
+        },
     },
 }
 
@@ -119,26 +139,31 @@ class ConfigManager:
             logger.error(f"Failed to create default config: {e}")
             return None
 
-    def load_config(self) -> None:
+    def load_config(self):
         """Load configuration from file."""
         try:
-            if not os.path.exists(self.config_path):
-                logger.warning(f"Config file not found: {self.config_path}")
-                return
+            if not self.config_path:
+                return self.config
 
-            with open(self.config_path, "r", encoding="utf-8") as f:
-                user_config = yaml.safe_load(f)
+            with open(self.config_path, "r") as f:
+                file_config = yaml.safe_load(f)
 
-            if user_config:
-                self._merge_config(self.config, user_config)
-                logger.info("Configuration loaded successfully")
+            if file_config:
+                self._merge_config(self.config, file_config)
+
+            # Set up logging based on loaded config
+            log_config = self.config.get("logging", {})
+            log_level = log_config.get("level", "warning").upper()
+            
+            # Configure both Python's logging and structlog
+            logging.getLogger().setLevel(getattr(logging, log_level))
+            
+            logger.debug("Configuration loaded", config=self.config)
+            return self.config
 
         except Exception as e:
-            logger.error(
-                "Failed to load configuration",
-                error=str(e),
-                config_path=self.config_path,
-            )
+            logger.error(f"Failed to load configuration: {e}")
+            return None
 
     def _merge_config(self, base: dict, override: dict) -> None:
         """Recursively merge override config into base config.
