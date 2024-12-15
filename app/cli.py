@@ -20,11 +20,21 @@ from app.monitors import CPUMonitor, DiskMonitor, MemoryMonitor, PingMonitor
 logger = structlog.get_logger()
 
 
-def setup_logging(config):
-    """Set up logging configuration."""
+def setup_logging(config, component=None):
+    """Set up logging configuration.
+    
+    Args:
+        config: The configuration dictionary
+        component: Optional component name to use component-specific log level
+    """
     log_config = config.get("logging", {})
     log_file = log_config.get("file", "stdout")
-    log_level = log_config.get("level", "INFO")
+    
+    # Get component-specific log level if provided, otherwise use global level
+    if component and "components" in log_config:
+        log_level = log_config.get("components", {}).get(component, log_config.get("level", "INFO"))
+    else:
+        log_level = log_config.get("level", "INFO")
 
     # Base processors for all outputs
     base_processors = [
@@ -111,20 +121,23 @@ def remove_pid_file():
 
 def get_monitor_instances(config):
     """Create monitor instances from configuration."""
-    monitors = []
+    # Set up logging for monitors component
+    setup_logging(config, component="monitors")
+    
+    monitors = {}
     monitor_config = config.get("monitors", {})
 
-    if monitor_config.get("cpu", {}).get("enabled", True):
-        monitors.append(CPUMonitor("cpu", monitor_config["cpu"]))
+    if monitor_config.get("cpu", {}).get("enabled", False):
+        monitors["cpu"] = CPUMonitor("cpu", monitor_config["cpu"])
 
-    if monitor_config.get("memory", {}).get("enabled", True):
-        monitors.append(MemoryMonitor("memory", monitor_config["memory"]))
+    if monitor_config.get("memory", {}).get("enabled", False):
+        monitors["memory"] = MemoryMonitor("memory", monitor_config["memory"])
 
-    if monitor_config.get("disk", {}).get("enabled", True):
-        monitors.append(DiskMonitor("disk", monitor_config["disk"]))
+    if monitor_config.get("disk", {}).get("enabled", False):
+        monitors["disk"] = DiskMonitor("disk", monitor_config["disk"])
 
-    if monitor_config.get("ping", {}).get("enabled", True):
-        monitors.append(PingMonitor("ping", monitor_config["ping"]))
+    if monitor_config.get("ping", {}).get("enabled", False):
+        monitors["ping"] = PingMonitor("ping", monitor_config["ping"])
 
     return monitors
 
@@ -139,7 +152,7 @@ def monitor_loop(config):
         logger.info(
             "Initialized monitors",
             monitor_count=len(monitors),
-            monitors=[m.name for m in monitors],
+            monitors=[m.name for m in monitors.values()],
         )
 
         alert_manager = AlertManager(config)
@@ -152,7 +165,7 @@ def monitor_loop(config):
         logger.info("Monitor started successfully")
 
         while True:
-            for monitor in monitors:
+            for monitor in monitors.values():
                 try:
                     if alert := monitor.check():
                         alert_manager.process_alert(alert)
@@ -304,6 +317,10 @@ def alerts():
 @cli.command()
 def metrics():
     """Display current system metrics."""
+    # Load config and set up logging with metrics component
+    config = ConfigManager().load_config()
+    setup_logging(config, component="metrics")
+    
     console = Console()
 
     # Initialize monitors
