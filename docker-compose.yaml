@@ -5,7 +5,7 @@ services:
     build: .
     volumes:
       - ./config.yaml:/etc/sme/config.yaml:ro
-      - ./logs:/var/log/sme
+      - ${PWD}/logs:/var/log/sme
       - /proc:/host/proc:ro  # Mount host's proc directory read-only
     tmpfs:
       - /var/run/sme # Simple tmpfs mount compatible with both Docker and Podman
@@ -17,7 +17,7 @@ services:
       - NET_RAW # Needed for ping
       - NET_ADMIN # Needed for network operations
     container_name: "sme"
-    user: "999:999" # Set container user/group ID for proper permissions
+    user: "${SME_UID:-999}:${SME_GID:-999}" # Allow override of user/group ID
     environment:
       - CONTAINER=1
       - PYTHONUNBUFFERED=1
