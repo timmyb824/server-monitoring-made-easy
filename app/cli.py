@@ -27,6 +27,10 @@ def setup_logging(config, component=None):
         config: The configuration dictionary
         component: Optional component name to use component-specific log level
     """
+    # Handle None config
+    if not config:
+        config = {}
+        
     log_config = config.get("logging", {})
     log_file = log_config.get("file", "stdout")
     
@@ -35,6 +39,9 @@ def setup_logging(config, component=None):
         log_level = log_config.get("components", {}).get(component, log_config.get("level", "INFO"))
     else:
         log_level = log_config.get("level", "INFO")
+
+    # Convert log level string to uppercase
+    log_level = log_level.upper()
 
     # Base processors for all outputs
     base_processors = [
@@ -60,7 +67,7 @@ def setup_logging(config, component=None):
         import logging
 
         logging.basicConfig(
-            level=getattr(logging, log_level.upper()),
+            level=getattr(logging, log_level),
             format="%(message)s",
             handlers=[
                 logging.StreamHandler(),  # Console output
@@ -121,23 +128,27 @@ def remove_pid_file():
 
 def get_monitor_instances(config):
     """Create monitor instances from configuration."""
+    # Handle None config
+    if not config:
+        config = {}
+        
     # Set up logging for monitors component
     setup_logging(config, component="monitors")
     
     monitors = {}
     monitor_config = config.get("monitors", {})
 
-    if monitor_config.get("cpu", {}).get("enabled", False):
-        monitors["cpu"] = CPUMonitor("cpu", monitor_config["cpu"])
+    if monitor_config.get("cpu", {}).get("enabled", True):  # Default to enabled
+        monitors["cpu"] = CPUMonitor("cpu", monitor_config.get("cpu", {"threshold": 80}))
 
-    if monitor_config.get("memory", {}).get("enabled", False):
-        monitors["memory"] = MemoryMonitor("memory", monitor_config["memory"])
+    if monitor_config.get("memory", {}).get("enabled", True):
+        monitors["memory"] = MemoryMonitor("memory", monitor_config.get("memory", {"threshold": 80}))
 
-    if monitor_config.get("disk", {}).get("enabled", False):
-        monitors["disk"] = DiskMonitor("disk", monitor_config["disk"])
+    if monitor_config.get("disk", {}).get("enabled", True):
+        monitors["disk"] = DiskMonitor("disk", monitor_config.get("disk", {"threshold": 80}))
 
-    if monitor_config.get("ping", {}).get("enabled", False):
-        monitors["ping"] = PingMonitor("ping", monitor_config["ping"])
+    if monitor_config.get("ping", {}).get("enabled", True):
+        monitors["ping"] = PingMonitor("ping", monitor_config.get("ping", {"threshold": 100}))
 
     return monitors
 
@@ -318,16 +329,20 @@ def alerts():
 def metrics():
     """Display current system metrics."""
     # Load config and set up logging with metrics component
-    config = ConfigManager().load_config()
+    config_manager = ConfigManager()
+    config = config_manager.load_config()
+    if not config:
+        config = {}  # Use empty dict as fallback
     setup_logging(config, component="metrics")
     
     console = Console()
 
-    # Initialize monitors
-    cpu_monitor = CPUMonitor("cpu", {"threshold": 80})
-    mem_monitor = MemoryMonitor("memory", {"threshold": 80})
-    disk_monitor = DiskMonitor("disk", {"threshold": 80})
-    ping_monitor = PingMonitor("ping", {"threshold": 100})
+    # Initialize monitors with default thresholds if no config
+    monitor_config = config.get("monitors", {})
+    cpu_monitor = CPUMonitor("cpu", monitor_config.get("cpu", {"threshold": 80}))
+    mem_monitor = MemoryMonitor("memory", monitor_config.get("memory", {"threshold": 80}))
+    disk_monitor = DiskMonitor("disk", monitor_config.get("disk", {"threshold": 80}))
+    ping_monitor = PingMonitor("ping", monitor_config.get("ping", {"threshold": 100}))
 
     # Collect metrics
     cpu = cpu_monitor.collect()
