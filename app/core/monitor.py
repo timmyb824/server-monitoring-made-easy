@@ -12,12 +12,13 @@ logger = structlog.get_logger()
 class Monitor(ABC):
     """Base class for all monitors."""
 
-    def __init__(self, name: str, config: dict[str, Any]):
+    def __init__(self, name: str, config: dict[str, Any], silent: bool = False):
         """Initialize the monitor.
 
         Args:
             name: Name of the monitor
             config: Configuration dictionary for the monitor
+            silent: If True, suppress all logging from this monitor
         """
         self.name = name
         self.enabled = config.get("enabled", True)
@@ -31,13 +32,16 @@ class Monitor(ABC):
         self.alert_state = "OK"
         self.consecutive_failures = 0
         self.logger = logger.bind(monitor=name)
-        self.logger.info(
-            "Monitor initialized",
-            enabled=self.enabled,
-            interval=self.interval,
-            threshold=self.threshold,
-            alert_count=self.alert_count,
-        )
+        self.silent = silent
+        
+        if not self.silent:
+            self.logger.info(
+                "Monitor initialized",
+                enabled=self.enabled,
+                interval=self.interval,
+                threshold=self.threshold,
+                alert_count=self.alert_count,
+            )
 
     @abstractmethod
     def collect(self) -> Any:
@@ -81,20 +85,22 @@ class Monitor(ABC):
             self.last_check = time.time()
             self.last_value = value
 
-            # Log every check, not just alerts
-            self.logger.info("Metric collected", value=value, threshold=self.threshold)
+            if not self.silent:
+                # Log every check, not just alerts
+                self.logger.info("Metric collected", value=value, threshold=self.threshold)
 
             if self.check_threshold(value):
                 self.consecutive_failures += 1
                 if self.consecutive_failures >= self.alert_count:
                     if self.alert_state == "OK":
                         self.alert_state = "FIRING"
-                        self.logger.warning(
-                            "Threshold exceeded",
-                            value=value,
-                            threshold=self.threshold,
-                            failures=self.consecutive_failures,
-                        )
+                        if not self.silent:
+                            self.logger.warning(
+                                "Threshold exceeded",
+                                value=value,
+                                threshold=self.threshold,
+                                failures=self.consecutive_failures,
+                            )
                         return {
                             "monitor": self.name,
                             "state": "FIRING",
@@ -104,20 +110,22 @@ class Monitor(ABC):
                             "consecutive_failures": self.consecutive_failures,
                         }
                 else:
-                    self.logger.info(
-                        "Threshold exceeded but under alert count",
-                        value=value,
-                        threshold=self.threshold,
-                        failures=self.consecutive_failures,
-                        required=self.alert_count,
-                    )
+                    if not self.silent:
+                        self.logger.info(
+                            "Threshold exceeded but under alert count",
+                            value=value,
+                            threshold=self.threshold,
+                            failures=self.consecutive_failures,
+                            required=self.alert_count,
+                        )
             else:
                 self.consecutive_failures = 0
                 if self.alert_state == "FIRING":
                     self.alert_state = "OK"
-                    self.logger.info(
-                        "Alert resolved", value=value, threshold=self.threshold
-                    )
+                    if not self.silent:
+                        self.logger.info(
+                            "Alert resolved", value=value, threshold=self.threshold
+                        )
                     return {
                         "monitor": self.name,
                         "state": "OK",
@@ -127,7 +135,8 @@ class Monitor(ABC):
                     }
 
         except Exception as e:
-            self.logger.error("Error collecting metric", error=str(e))
+            if not self.silent:
+                self.logger.error("Error collecting metric", error=str(e))
             return {
                 "monitor": self.name,
                 "state": "ERROR",

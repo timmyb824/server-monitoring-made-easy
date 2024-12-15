@@ -5,6 +5,7 @@ import sys
 import platform
 import psutil
 import structlog
+from typing import Any
 
 from .base import Monitor
 
@@ -55,6 +56,16 @@ def read_cgroup_memory() -> tuple[int, int]:
 
 class MemoryMonitor(Monitor):
     """Monitor memory usage."""
+
+    def __init__(self, name: str, config: dict[str, Any], silent: bool = False):
+        """Initialize memory monitor.
+
+        Args:
+            name: Name of the monitor
+            config: Configuration dictionary
+            silent: If True, suppress all logging from this monitor
+        """
+        super().__init__(name, config, silent)
 
     def collect(self) -> float:
         """Collect memory usage percentage.

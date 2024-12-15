@@ -154,10 +154,10 @@ class ConfigManager:
             # Set up logging based on loaded config
             log_config = self.config.get("logging", {})
             log_level = log_config.get("level", "warning").upper()
-            
+
             # Configure both Python's logging and structlog
             logging.getLogger().setLevel(getattr(logging, log_level))
-            
+
             logger.debug("Configuration loaded", config=self.config)
             return self.config
 

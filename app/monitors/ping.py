@@ -10,14 +10,15 @@ from .base import Monitor
 class PingMonitor(Monitor):
     """Monitor network latency via ping."""
 
-    def __init__(self, name: str, config: dict[str, Any]):
+    def __init__(self, name: str, config: dict[str, Any], silent: bool = False):
         """Initialize ping monitor.
 
         Args:
             name: Name of the monitor
             config: Configuration dictionary
+            silent: If True, suppress all logging from this monitor
         """
-        super().__init__(name, config)
+        super().__init__(name, config, silent)
         self.targets = config.get("targets", ["1.1.1.1"])  # Default to Cloudflare
         self.timeout = config.get("timeout", 5)  # Default 5 second timeout
 

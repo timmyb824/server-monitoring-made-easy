@@ -22,7 +22,7 @@ logger = structlog.get_logger()
 
 def setup_logging(config, component=None):
     """Set up logging configuration.
-    
+
     Args:
         config: The configuration dictionary
         component: Optional component name to use component-specific log level
@@ -30,10 +30,10 @@ def setup_logging(config, component=None):
     # Handle None config
     if not config:
         config = {}
-        
+
     log_config = config.get("logging", {})
     log_file = log_config.get("file", "stdout")
-    
+
     # Get component-specific log level if provided, otherwise use global level
     if component and "components" in log_config:
         log_level = log_config.get("components", {}).get(component, log_config.get("level", "INFO"))
@@ -131,10 +131,10 @@ def get_monitor_instances(config):
     # Handle None config
     if not config:
         config = {}
-        
+
     # Set up logging for monitors component
     setup_logging(config, component="monitors")
-    
+
     monitors = {}
     monitor_config = config.get("monitors", {})
 
@@ -328,21 +328,20 @@ def alerts():
 @cli.command()
 def metrics():
     """Display current system metrics."""
-    # Load config and set up logging with metrics component
+    # Load config but don't change logging setup
     config_manager = ConfigManager()
     config = config_manager.load_config()
     if not config:
-        config = {}  # Use empty dict as fallback
-    setup_logging(config, component="metrics")
-    
+        config = {}
+
     console = Console()
 
     # Initialize monitors with default thresholds if no config
     monitor_config = config.get("monitors", {})
-    cpu_monitor = CPUMonitor("cpu", monitor_config.get("cpu", {"threshold": 80}))
-    mem_monitor = MemoryMonitor("memory", monitor_config.get("memory", {"threshold": 80}))
-    disk_monitor = DiskMonitor("disk", monitor_config.get("disk", {"threshold": 80}))
-    ping_monitor = PingMonitor("ping", monitor_config.get("ping", {"threshold": 100}))
+    cpu_monitor = CPUMonitor("cpu", monitor_config.get("cpu", {"threshold": 80}), silent=True)
+    mem_monitor = MemoryMonitor("memory", monitor_config.get("memory", {"threshold": 80}), silent=True)
+    disk_monitor = DiskMonitor("disk", monitor_config.get("disk", {"threshold": 80}), silent=True)
+    ping_monitor = PingMonitor("ping", monitor_config.get("ping", {"threshold": 100}), silent=True)
 
     # Collect metrics
     cpu = cpu_monitor.collect()
@@ -350,17 +349,15 @@ def metrics():
     disk = disk_monitor.collect()
     ping_results = ping_monitor.collect()
 
-    # Create table
+    # Create and display tables
     table = Table(title="System Metrics", show_header=True, header_style="bold magenta")
     table.add_column("Metric", style="cyan")
     table.add_column("Value", justify="right", style="green")
 
-    # Add rows
     table.add_row("CPU Usage", f"{cpu:.1f}%")
     table.add_row("Memory Usage", f"{memory:.1f}%")
     table.add_row("Disk Usage", f"{disk:.1f}%")
 
-    # Create ping table
     ping_table = Table(show_header=True, header_style="bold magenta")
     ping_table.add_column("Host", style="cyan")
     ping_table.add_column("Latency", justify="right", style="green")
@@ -370,7 +367,6 @@ def metrics():
             host, f"{latency:.1f}ms" if latency is not None else "Timeout"
         )
 
-    # Display tables
     console.print(Panel(table, title="System Resources", border_style="blue"))
     console.print(Panel(ping_table, title="Network Latency", border_style="blue"))
 

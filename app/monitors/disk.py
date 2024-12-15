@@ -10,14 +10,15 @@ from .base import Monitor
 class DiskMonitor(Monitor):
     """Monitor disk usage."""
 
-    def __init__(self, name: str, config: dict[str, Any]):
+    def __init__(self, name: str, config: dict[str, Any], silent: bool = False):
         """Initialize disk monitor.
 
         Args:
             name: Name of the monitor
             config: Configuration dictionary
+            silent: If True, suppress all logging from this monitor
         """
-        super().__init__(name, config)
+        super().__init__(name, config, silent)
         self.path = config.get("path", "/")
 
     def collect(self) -> float:
