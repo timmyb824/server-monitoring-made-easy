@@ -20,6 +20,51 @@ from app.monitors import CPUMonitor, DiskMonitor, MemoryMonitor, PingMonitor
 logger = structlog.get_logger()
 
 
+def get_app_paths(config=None):
+    """Get application paths based on user permissions and config.
+
+    Args:
+        config: Optional configuration dictionary
+
+    Returns:
+        tuple: (log_file_path, pid_file_path)
+    """
+    if config is None:
+        config = {}
+
+    paths_config = config.get("paths", {})
+
+    # Default paths
+    if os.getuid() == 0:  # Root user
+        default_log_path = "/var/log/sme/server-monitor.log"
+        default_pid_path = "/var/run/sme/server-monitor.pid"
+    else:  # Non-root user
+        home = os.path.expanduser("~")
+        default_log_path = os.path.join(home, ".local/log/sme/server-monitor.log")
+        default_pid_path = os.path.join(home, ".local/run/sme/server-monitor.pid")
+
+    # Get paths from config or use defaults
+    log_path = os.path.expanduser(paths_config.get("log_file", default_log_path))
+    pid_path = os.path.expanduser(paths_config.get("pid_file", default_pid_path))
+
+    # Ensure directories exist with proper permissions
+    for path in [log_path, pid_path]:
+        directory = os.path.dirname(path)
+        if not os.path.exists(directory):
+            os.makedirs(directory, mode=0o755, exist_ok=True)
+            # Ensure user owns the directory if not root
+            if os.getuid() != 0:
+                os.chown(directory, os.getuid(), os.getgid())
+
+    return log_path, pid_path
+
+
+def get_pid_file():
+    """Get the appropriate PID file location."""
+    _, pid_path = get_app_paths()
+    return pid_path
+
+
 def setup_logging(config, component=None):
     """Set up logging configuration.
 
@@ -32,7 +77,7 @@ def setup_logging(config, component=None):
         config = {}
 
     log_config = config.get("logging", {})
-    log_file = log_config.get("file", "stdout")
+    log_path, _ = get_app_paths(config)
 
     # Get component-specific log level if provided, otherwise use global level
     if component and "components" in log_config:
@@ -51,34 +96,29 @@ def setup_logging(config, component=None):
         structlog.stdlib.add_log_level,
     ]
 
-    # Always log to stdout for container environments
-    if os.getenv("CONTAINER") == "1":
-        # Set up file logging
-        file_path = "/var/log/sme/server-monitor.log"
-        if os.path.dirname(file_path):
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    # Configure logging handlers
+    handlers = [logging.StreamHandler()]  # Always log to console
 
-        # Configure both console and file logging
-        processors = [
-            *base_processors,
-            structlog.processors.TimeStamper(fmt="iso"),
-            structlog.processors.JSONRenderer(),
-        ]
-
-        # Configure Python's built-in logging
-        import logging
-
-        logging.basicConfig(
-            level=getattr(logging, log_level),
-            format="%(message)s",
-            handlers=[
-                logging.StreamHandler(),  # Console output
-                logging.FileHandler(file_path),  # File output
-            ],
+    try:
+        # Try to create/open log file
+        handlers.append(logging.FileHandler(log_path))
+    except PermissionError:
+        logger.warning(
+            "Cannot write to log file, falling back to console only", log_path=log_path
         )
-    else:
-        # For non-container environments, use console renderer
-        processors = [*base_processors, structlog.dev.ConsoleRenderer()]
+
+    # Configure Python's built-in logging
+    logging.basicConfig(
+        level=getattr(logging, log_level),
+        format="%(message)s",
+        handlers=handlers,
+    )
+
+    # Configure structlog
+    processors = [
+        *base_processors,
+        structlog.processors.JSONRenderer(),
+    ]
 
     structlog.configure(
         processors=processors,
@@ -89,78 +129,9 @@ def setup_logging(config, component=None):
 
     logger.info(
         "Logging initialized",
-        log_file=log_file,
+        log_path=log_path,
         log_level=log_level,
-        container=bool(os.getenv("CONTAINER")),
     )
-
-
-def get_pid_file():
-    """Get the appropriate PID file location."""
-    if os.getenv("CONTAINER") == "1":  # Running in container
-        return "/var/run/sme/server-monitor.pid"
-    elif os.getuid() == 0:  # Running as root
-        return "/var/run/sme/server-monitor.pid"
-    return os.path.expanduser("~/.sme/server-monitor.pid")
-
-
-def create_pid_file():
-    """Create PID file for the daemon."""
-    pid = str(os.getpid())
-    pid_file = get_pid_file()
-    pid_dir = os.path.dirname(pid_file)
-
-    try:
-        os.makedirs(pid_dir, exist_ok=True)
-        with open(pid_file, "w", encoding="utf-8") as f:
-            f.write(pid)
-        return pid_file
-    except Exception as e:
-        logger.error("Failed to create PID file", error=str(e), pid_file=pid_file)
-        return None
-
-
-def remove_pid_file():
-    """Remove PID file."""
-    try:
-        os.remove(get_pid_file())
-    except Exception as e:
-        logger.warning("Failed to remove PID file", error=str(e))
-
-
-def get_monitor_instances(config):
-    """Create monitor instances from configuration."""
-    # Handle None config
-    if not config:
-        config = {}
-
-    # Set up logging for monitors component
-    setup_logging(config, component="monitors")
-
-    monitors = {}
-    monitor_config = config.get("monitors", {})
-
-    if monitor_config.get("cpu", {}).get("enabled", True):  # Default to enabled
-        monitors["cpu"] = CPUMonitor(
-            "cpu", monitor_config.get("cpu", {"threshold": 80})
-        )
-
-    if monitor_config.get("memory", {}).get("enabled", True):
-        monitors["memory"] = MemoryMonitor(
-            "memory", monitor_config.get("memory", {"threshold": 80})
-        )
-
-    if monitor_config.get("disk", {}).get("enabled", True):
-        monitors["disk"] = DiskMonitor(
-            "disk", monitor_config.get("disk", {"threshold": 80})
-        )
-
-    if monitor_config.get("ping", {}).get("enabled", True):
-        monitors["ping"] = PingMonitor(
-            "ping", monitor_config.get("ping", {"threshold": 100})
-        )
-
-    return monitors
 
 
 def monitor_loop(config):
@@ -229,16 +200,37 @@ def start(config: Optional[str], foreground: bool):
     if foreground:
         monitor_loop(config_manager.get_config())
     else:
-        # Create a more permissive daemon context for development
+        # Get paths from config
+        log_path, pid_path = get_app_paths(config_manager.get_config())
+
+        # Create directories if they don't exist
+        for path in [log_path, pid_path]:
+            directory = os.path.dirname(path)
+            if not os.path.exists(directory):
+                try:
+                    os.makedirs(directory, mode=0o755, exist_ok=True)
+                    if os.getuid() != 0:  # If not root
+                        os.chown(directory, os.getuid(), os.getgid())
+                except PermissionError:
+                    click.echo(
+                        f"Error: Cannot create directory {directory}. Please check permissions."
+                    )
+                    sys.exit(1)
+
+        # Create a more permissive daemon context
         context = daemon.DaemonContext(
-            working_directory=os.getcwd(), umask=0o002, detach_process=True
+            working_directory=os.getcwd(),
+            umask=0o002,
+            detach_process=True,
+            files_preserve=[],  # Add any file descriptors that need to be preserved
         )
 
-        # If we're not root, adjust the paths
-        if os.getuid() != 0:
-            pid_dir = os.path.expanduser("~/.sme")
-            os.makedirs(pid_dir, exist_ok=True)
+        # Set up PID file
+        try:
             context.pidfile = get_pid_file()
+        except Exception as e:
+            click.echo(f"Error setting up PID file: {e}")
+            sys.exit(1)
 
         try:
             with context:
@@ -355,10 +347,10 @@ def metrics():
         "memory", monitor_config.get("memory", {"threshold": 80}), silent=True
     )
     disk_monitor = DiskMonitor(
-        "disk", monitor_config.get("disk", {"threshold": 80}), silent=True
+        "disk", monitor_config.get("disk", {"threshold": 85}), silent=True
     )
     ping_monitor = PingMonitor(
-        "ping", monitor_config.get("ping", {"threshold": 100}), silent=True
+        "ping", monitor_config.get("ping", {"threshold": 200}), silent=True
     )
 
     # Collect metrics
@@ -387,6 +379,113 @@ def metrics():
 
     console.print(Panel(table, title="System Resources", border_style="blue"))
     console.print(Panel(ping_table, title="Network Latency", border_style="blue"))
+
+
+@cli.command()
+@click.option(
+    "--path",
+    "-p",
+    type=click.Path(),
+    default="config.yaml",
+    help="Path to create the config file",
+)
+@click.option(
+    "--no-log-file",
+    is_flag=True,
+    help="Configure logging to console only (no log file)",
+)
+def init(path: str, no_log_file: bool):
+    """Initialize a new configuration file with default settings."""
+    if os.path.exists(path):
+        click.echo(
+            f"Error: {path} already exists. Please choose a different path or remove the existing file."
+        )
+        sys.exit(1)
+
+    # Create default config
+    default_config = {
+        "logging": {
+            "level": "info",
+            "components": {
+                "monitors": "info",
+                "alerts": "warning",
+                "metrics": "warning",
+                "daemon": "info",
+            },
+        },
+        "monitors": {
+            "cpu": {
+                "enabled": True,
+                "interval": 60,
+                "threshold": 80,
+                "alert_count": 3,
+            },
+            "memory": {
+                "enabled": True,
+                "interval": 60,
+                "threshold": 80,
+                "alert_count": 1,
+            },
+            "disk": {
+                "enabled": True,
+                "interval": 300,
+                "threshold": 85,
+                "alert_count": 2,
+                "path": "/",
+            },
+            "ping": {
+                "enabled": True,
+                "interval": 60,
+                "threshold": 200,
+                "alert_count": 5,
+                "targets": ["8.8.8.8", "1.1.1.1", "google.com"],
+            },
+        },
+        "alerts": {
+            "enabled": True,
+            "methods": [
+                {
+                    "type": "console",
+                    "enabled": True,
+                }
+            ],
+        },
+    }
+
+    # Add paths configuration if log file is desired
+    if not no_log_file:
+        if os.getuid() == 0:  # Root user
+            default_config["paths"] = {
+                "log_file": "/var/log/sme/server-monitor.log",
+                "pid_file": "/var/run/sme/server-monitor.pid",
+            }
+        else:  # Non-root user
+            default_config["paths"] = {
+                "log_file": "~/.local/log/sme/server-monitor.log",
+                "pid_file": "~/.local/run/sme/server-monitor.pid",
+            }
+
+    # Create the config file
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        with open(path, "w") as f:
+            yaml.dump(default_config, f, default_flow_style=False, sort_keys=False)
+        click.echo(f"Created default configuration at {path}")
+
+        # Print next steps
+        click.echo("\nNext steps:")
+        click.echo("1. Review and customize the configuration file")
+        if not no_log_file:
+            click.echo("2. Ensure log directory exists and has proper permissions")
+            if os.getuid() == 0:
+                click.echo("   sudo mkdir -p /var/log/sme /var/run/sme")
+                click.echo("   sudo chown -R $USER:$USER /var/log/sme /var/run/sme")
+            else:
+                click.echo("   mkdir -p ~/.local/log/sme ~/.local/run/sme")
+        click.echo(f"3. Start the monitor: sme start -c {path}")
+    except Exception as e:
+        click.echo(f"Error creating config file: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

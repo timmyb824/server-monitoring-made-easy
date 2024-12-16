@@ -1,35 +1,77 @@
-# Server Monitoring Made Easy Configuration
+# Server Monitoring Made Easy Configuration Example
 
+# Global logging configuration
+logging:
+  level: "info" # Global logging level (debug, info, warning, error)
+  # Component-specific logging levels (optional)
+  components:
+    monitors: "info"
+    alerts: "warning"
+    metrics: "warning"
+    daemon: "info"
+
+# File paths configuration
+paths:
+  # Log file path - ensure this directory exists and has proper permissions
+  # For non-root users, consider using: ~/.local/log/sme/server-monitor.log
+  log_file: "~/.local/log/sme/server-monitor.log"
+
+  # PID file path - ensure this directory exists and has proper permissions
+  # For non-root users, consider using: ~/.local/run/sme/server-monitor.pid
+  pid_file: "~/.local/run/sme/server-monitor.pid"
+
+# Monitor configuration
 monitors:
   cpu:
     enabled: true
-    threshold: 80 # Alert when CPU usage > 80%
-    interval: 60 # Check every 60 seconds
-    alert_count: 3 # Alert after 3 consecutive failures
+    interval: 60 # seconds
+    threshold: 80 # percentage
+    alert_count: 3 # number of consecutive threshold breaches before alerting
 
   memory:
     enabled: true
-    threshold: 80 # Alert when memory usage > 90%
     interval: 60
-    alert_count: 1 # Alert after 3 consecutive failures
+    threshold: 80
+    alert_count: 1
 
   disk:
     enabled: true
-    threshold: 85 # Alert when disk is > 85% full
-    interval: 300 # Check every 5 minutes
-    path: "/" # Monitor root partition
-    alert_count: 2 # Alert after 2 consecutive failures (less for disk since it's checked less frequently)
+    interval: 300
+    threshold: 85
+    alert_count: 2
+    path: "/" # mount point to monitor
 
   ping:
     enabled: true
-    threshold: 200 # Alert when ping > 200ms
     interval: 60
-    alert_count: 5 # More consecutive checks for network latency due to potential fluctuations
-    targets:
-      - "8.8.8.8" # Google DNS
-      - "1.1.1.1" # Cloudflare DNS
-      - "google.com" # Google
-    timeout: 5 # Ping timeout in seconds
+    threshold: 200 # milliseconds
+    alert_count: 5
+    targets: # list of hosts to ping
+      - "8.8.8.8"
+      - "1.1.1.1"
+      - "google.com"
+
+# Alert configuration
+alerts:
+  enabled: true
+  methods:
+    - type: "console" # Built-in console alerts
+      enabled: true
+
+    # Uncomment and configure for email alerts
+    # - type: "email"
+    #   enabled: false
+    #   smtp_server: "smtp.gmail.com"
+    #   smtp_port: 587
+    #   username: "your-email@gmail.com"
+    #   password: "your-app-specific-password"
+    #   from_addr: "your-email@gmail.com"
+    #   to_addr: "recipient@example.com"
+
+    # Uncomment and configure for Slack alerts
+    # - type: "slack"
+    #   enabled: false
+    #   webhook_url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
 
 # Configure your notification channels here
 notifications:
@@ -47,12 +89,3 @@ notifications:
   - type: telegram
     uri: "tgram://bottoken/ChatID"
     enabled: false
-
-logging:
-  level: "info" # Global log level: debug, info, warning, error
-  file: "stdout" # Use 'stdout' for console output or a file path
-  components: # Per-component log levels
-    monitors: "info" # Log level for monitors
-    alerts: "info" # Log level for alert system
-    metrics: "error" # Log level for metrics command (suppress most output)
-    daemon: "info" # Log level for daemon operations
