@@ -33,7 +33,7 @@ class Monitor(ABC):
         self.consecutive_failures = 0
         self.logger = logger.bind(monitor=name)
         self.silent = silent
-        
+
         if not self.silent:
             self.logger.info(
                 "Monitor initialized",
@@ -87,7 +87,9 @@ class Monitor(ABC):
 
             if not self.silent:
                 # Log every check, not just alerts
-                self.logger.info("Metric collected", value=value, threshold=self.threshold)
+                self.logger.info(
+                    "Metric collected", value=value, threshold=self.threshold
+                )
 
             if self.check_threshold(value):
                 self.consecutive_failures += 1

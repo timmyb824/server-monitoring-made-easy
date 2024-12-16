@@ -1,7 +1,8 @@
 """CPU monitor."""
 
-import psutil
 from typing import Any
+
+import psutil
 
 from .base import Monitor
 

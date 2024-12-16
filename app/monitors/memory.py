@@ -1,11 +1,12 @@
 """Memory monitor."""
 
 import os
-import sys
 import platform
+import sys
+from typing import Any
+
 import psutil
 import structlog
-from typing import Any
 
 from .base import Monitor
 
@@ -17,22 +18,26 @@ def read_cgroup_memory() -> tuple[int, int]:
     try:
         # Check if we're on Linux
         is_linux = platform.system() == "Linux"
-        meminfo_path = "/host/proc/meminfo" if (is_linux and os.path.exists("/host/proc")) else "/proc/meminfo"
-        
+        meminfo_path = (
+            "/host/proc/meminfo"
+            if (is_linux and os.path.exists("/host/proc"))
+            else "/proc/meminfo"
+        )
+
         if not is_linux:
             logger.warning(
                 "Container memory monitoring is only fully supported on Linux hosts. "
                 "On non-Linux systems (like macOS), container memory metrics will reflect "
                 "the VM's memory usage, not the host system.",
-                platform=platform.system()
+                platform=platform.system(),
             )
-            
+
         with open(meminfo_path, "r") as f:
             meminfo = f.read()
-            
+
         # Log raw meminfo for debugging
         logger.debug("Raw meminfo", content=meminfo, source=meminfo_path)
-            
+
         # Parse meminfo
         lines = meminfo.strip().split("\n")
         stats = {}
@@ -41,13 +46,13 @@ def read_cgroup_memory() -> tuple[int, int]:
             if len(fields) < 2:
                 continue
             stats[fields[0].rstrip(":")] = int(fields[1]) * 1024  # Convert to bytes
-            
+
         total = stats.get("MemTotal", 0)
         available = stats.get("MemAvailable", 0)
-        
+
         # Log all memory stats for debugging
         logger.debug("Parsed meminfo", stats=stats)
-        
+
         return total, available
     except Exception as e:
         logger.error("Failed to read cgroup memory", error=str(e))
@@ -69,13 +74,13 @@ class MemoryMonitor(Monitor):
 
     def collect(self) -> float:
         """Collect memory usage percentage.
-        
+
         When running in a container with pid=host, this will return the host's
         memory usage by reading directly from /proc/meminfo.
         """
         # Check if we're running in a container
         in_container = os.getenv("CONTAINER") == "1"
-        
+
         if in_container:
             # When in container, read directly from /proc/meminfo
             total, available = read_cgroup_memory()
@@ -91,7 +96,7 @@ class MemoryMonitor(Monitor):
             total = memory.total
             available = memory.available
             logger.debug("Using psutil on host", memory=memory._asdict())
-            
+
         # Log detailed memory information
         logger.debug(
             "Memory details",
@@ -99,14 +104,14 @@ class MemoryMonitor(Monitor):
             available=available,
             in_container=in_container,
         )
-        
+
         if total == 0:
             logger.error("Failed to get memory information")
             return 0.0
-            
+
         used = total - available
         percent = (used / total) * 100
-        
+
         logger.debug(
             "Memory calculation",
             total=total,
@@ -114,7 +119,7 @@ class MemoryMonitor(Monitor):
             available=available,
             percent=percent,
         )
-        
+
         return percent
 
     def check_threshold(self, value: float) -> bool:

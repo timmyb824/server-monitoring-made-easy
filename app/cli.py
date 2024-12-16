@@ -10,8 +10,8 @@ import daemon
 import structlog
 import yaml
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
+from rich.table import Table
 
 from app.config import ConfigManager
 from app.core.alerts import AlertManager
@@ -36,7 +36,9 @@ def setup_logging(config, component=None):
 
     # Get component-specific log level if provided, otherwise use global level
     if component and "components" in log_config:
-        log_level = log_config.get("components", {}).get(component, log_config.get("level", "INFO"))
+        log_level = log_config.get("components", {}).get(
+            component, log_config.get("level", "INFO")
+        )
     else:
         log_level = log_config.get("level", "INFO")
 
@@ -139,16 +141,24 @@ def get_monitor_instances(config):
     monitor_config = config.get("monitors", {})
 
     if monitor_config.get("cpu", {}).get("enabled", True):  # Default to enabled
-        monitors["cpu"] = CPUMonitor("cpu", monitor_config.get("cpu", {"threshold": 80}))
+        monitors["cpu"] = CPUMonitor(
+            "cpu", monitor_config.get("cpu", {"threshold": 80})
+        )
 
     if monitor_config.get("memory", {}).get("enabled", True):
-        monitors["memory"] = MemoryMonitor("memory", monitor_config.get("memory", {"threshold": 80}))
+        monitors["memory"] = MemoryMonitor(
+            "memory", monitor_config.get("memory", {"threshold": 80})
+        )
 
     if monitor_config.get("disk", {}).get("enabled", True):
-        monitors["disk"] = DiskMonitor("disk", monitor_config.get("disk", {"threshold": 80}))
+        monitors["disk"] = DiskMonitor(
+            "disk", monitor_config.get("disk", {"threshold": 80})
+        )
 
     if monitor_config.get("ping", {}).get("enabled", True):
-        monitors["ping"] = PingMonitor("ping", monitor_config.get("ping", {"threshold": 100}))
+        monitors["ping"] = PingMonitor(
+            "ping", monitor_config.get("ping", {"threshold": 100})
+        )
 
     return monitors
 
@@ -338,10 +348,18 @@ def metrics():
 
     # Initialize monitors with default thresholds if no config
     monitor_config = config.get("monitors", {})
-    cpu_monitor = CPUMonitor("cpu", monitor_config.get("cpu", {"threshold": 80}), silent=True)
-    mem_monitor = MemoryMonitor("memory", monitor_config.get("memory", {"threshold": 80}), silent=True)
-    disk_monitor = DiskMonitor("disk", monitor_config.get("disk", {"threshold": 80}), silent=True)
-    ping_monitor = PingMonitor("ping", monitor_config.get("ping", {"threshold": 100}), silent=True)
+    cpu_monitor = CPUMonitor(
+        "cpu", monitor_config.get("cpu", {"threshold": 80}), silent=True
+    )
+    mem_monitor = MemoryMonitor(
+        "memory", monitor_config.get("memory", {"threshold": 80}), silent=True
+    )
+    disk_monitor = DiskMonitor(
+        "disk", monitor_config.get("disk", {"threshold": 80}), silent=True
+    )
+    ping_monitor = PingMonitor(
+        "ping", monitor_config.get("ping", {"threshold": 100}), silent=True
+    )
 
     # Collect metrics
     cpu = cpu_monitor.collect()

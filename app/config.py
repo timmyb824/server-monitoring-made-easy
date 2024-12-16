@@ -1,11 +1,11 @@
 """Configuration management for Server Monitoring Made Easy."""
 
+import logging
 import os
 from typing import Optional
 
 import structlog
 import yaml
-import logging
 
 # Configure initial logging with WARNING level
 logging.basicConfig(level=logging.WARNING)
