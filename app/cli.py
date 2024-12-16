@@ -203,7 +203,7 @@ def monitor_loop(config):
             for monitor in monitors.values():
                 if monitor.should_check():
                     if alert := monitor.check():
-                        alert_manager.handle_alert(alert)
+                        alert_manager.process_alert(alert)
             time.sleep(1)
 
     except KeyboardInterrupt:
@@ -372,9 +372,7 @@ def metrics():
     """Display current system metrics."""
     # Load config but don't change logging setup
     config_manager = ConfigManager()
-    config = config_manager.load_config()
-    if not config:
-        config = {}
+    config = config_manager.load_config() or {}
 
     console = Console()
 
@@ -508,7 +506,7 @@ def init(path: str, no_log_file: bool):
     # Create the config file
     try:
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             yaml.dump(default_config, f, default_flow_style=False, sort_keys=False)
         click.echo(f"Created default configuration at {path}")
 
