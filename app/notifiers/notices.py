@@ -50,7 +50,7 @@ async def send_notification_async(
 
             try:
                 apobj.add(uri)
-                logger.debug(
+                logger.info(
                     f"Successfully added {notification_type} notification service"
                 )
             except Exception as e:
