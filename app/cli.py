@@ -1,5 +1,6 @@
 """Command-line interface for Server Monitoring Made Easy."""
 
+import logging
 import os
 import sys
 import time
@@ -63,6 +64,32 @@ def get_pid_file():
     """Get the appropriate PID file location."""
     _, pid_path = get_app_paths()
     return pid_path
+
+
+def create_pid_file():
+    """Create PID file for the daemon."""
+    pid = str(os.getpid())
+    pid_file = get_pid_file()
+    pid_dir = os.path.dirname(pid_file)
+
+    try:
+        os.makedirs(pid_dir, exist_ok=True)
+        with open(pid_file, "w", encoding="utf-8") as f:
+            f.write(pid)
+        return pid_file
+    except Exception as e:
+        logger.error("Failed to create PID file", error=str(e), pid_file=pid_file)
+        return None
+
+
+def remove_pid_file():
+    """Remove PID file."""
+    try:
+        pid_file = get_pid_file()
+        if os.path.exists(pid_file):
+            os.remove(pid_file)
+    except Exception as e:
+        logger.warning("Failed to remove PID file", error=str(e))
 
 
 def setup_logging(config, component=None):
@@ -137,41 +164,54 @@ def setup_logging(config, component=None):
 def monitor_loop(config):
     """Main monitoring loop."""
     try:
-        setup_logging(config)
-        logger.info("Starting monitoring loop")
-
-        monitors = get_monitor_instances(config)
-        logger.info(
-            "Initialized monitors",
-            monitor_count=len(monitors),
-            monitors=[m.name for m in monitors.values()],
-        )
-
-        alert_manager = AlertManager(config)
-        logger.info("Alert manager initialized")
-
+        # Create PID file
         if not create_pid_file():
-            logger.error("Failed to create PID file, exiting")
+            logger.error("Failed to create PID file")
             return
 
-        logger.info("Monitor started successfully")
+        # Set up logging for monitors component
+        setup_logging(config, component="monitors")
+
+        # Initialize monitors
+        monitors = {}
+        monitor_config = config.get("monitors", {})
+
+        if monitor_config.get("cpu", {}).get("enabled", True):
+            monitors["cpu"] = CPUMonitor(
+                "cpu", monitor_config.get("cpu", {"threshold": 80})
+            )
+
+        if monitor_config.get("memory", {}).get("enabled", True):
+            monitors["memory"] = MemoryMonitor(
+                "memory", monitor_config.get("memory", {"threshold": 80})
+            )
+
+        if monitor_config.get("disk", {}).get("enabled", True):
+            monitors["disk"] = DiskMonitor(
+                "disk", monitor_config.get("disk", {"threshold": 85})
+            )
+
+        if monitor_config.get("ping", {}).get("enabled", True):
+            monitors["ping"] = PingMonitor(
+                "ping", monitor_config.get("ping", {"threshold": 200})
+            )
+
+        # Initialize alert manager
+        alert_manager = AlertManager(config)
 
         while True:
             for monitor in monitors.values():
-                try:
+                if monitor.should_check():
                     if alert := monitor.check():
-                        alert_manager.process_alert(alert)
-                except Exception as e:
-                    logger.error(
-                        "Monitor check failed", monitor=monitor.name, error=str(e)
-                    )
+                        alert_manager.handle_alert(alert)
             time.sleep(1)
 
+    except KeyboardInterrupt:
+        logger.info("Monitoring stopped by user")
     except Exception as e:
         logger.error("Monitoring loop failed", error=str(e))
     finally:
         remove_pid_file()
-        logger.info("Monitoring stopped")
 
 
 @click.group()

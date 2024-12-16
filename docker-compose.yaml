@@ -4,11 +4,10 @@ services:
   monitor:
     build: .
     volumes:
-      - ./config.yaml:/etc/sme/config.yaml:ro
-      - ${PWD}/logs:/var/log/sme
+      - ./config.yaml:/home/sme/config.yaml:ro
+      - ./logs:/home/sme/logs
+      - ./run:/home/sme/run
       - /proc:/host/proc:ro  # Mount host's proc directory read-only
-    tmpfs:
-      - /var/run/sme # Simple tmpfs mount compatible with both Docker and Podman
     pid: "host" # Needed for accurate system metrics
     privileged: true # Needed for system metrics access
     network_mode: "host" # Needed for accurate network metrics

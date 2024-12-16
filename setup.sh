@@ -15,22 +15,24 @@ create_directories() {
     local is_container=$2
 
     if [ "$is_container" = true ]; then
-        # Container setup
-        mkdir -p logs
-        chmod 777 logs # This ensures the container can write to the directory regardless of user
-        print_step "Created container log directory with proper permissions"
+        # For container environment, create local directories that will be mounted
+        mkdir -p ./logs
+        mkdir -p ./run
+        chmod -R 777 ./logs ./run  # Allow any user to write
+        print_step "Created container mount directories with proper permissions"
     else
-        # Local setup
-        if [ "$user" = "root" ]; then
-            # Root user - use system directories
-            mkdir -p /var/log/sme /var/run/sme
-            chmod 755 /var/log/sme /var/run/sme
-            chown -R "$SUDO_USER:$SUDO_USER" /var/log/sme /var/run/sme
+        # For local environment
+        if [ "$EUID" -eq 0 ]; then
+            # Running as root
+            mkdir -p /var/log/sme
+            mkdir -p /var/run/sme
+            chmod -R 755 /var/log/sme /var/run/sme
             print_step "Created system directories with proper permissions"
         else
-            # Non-root user - use local directories
-            mkdir -p ~/.local/log/sme ~/.local/run/sme
-            chmod 755 ~/.local/log/sme ~/.local/run/sme
+            # Running as non-root
+            mkdir -p "$HOME/.local/sme/logs"
+            mkdir -p "$HOME/.local/sme/run"
+            chmod -R 700 "$HOME/.local/sme"
             print_step "Created local directories with proper permissions"
         fi
     fi
@@ -84,8 +86,29 @@ main() {
         user="root"
     fi
 
-    # Create necessary directories
-    create_directories "$user" "$is_container"
+    # Create necessary directories with proper permissions
+    if [ "$is_container" = true ]; then
+        # For container environment, create local directories that will be mounted
+        mkdir -p ./logs
+        mkdir -p ./run
+        chmod -R 777 ./logs ./run  # Allow any user to write
+        print_step "Created container mount directories with proper permissions"
+    else
+        # For local environment
+        if [ "$EUID" -eq 0 ]; then
+            # Running as root
+            mkdir -p /var/log/sme
+            mkdir -p /var/run/sme
+            chmod -R 755 /var/log/sme /var/run/sme
+            print_step "Created system directories with proper permissions"
+        else
+            # Running as non-root
+            mkdir -p "$HOME/.local/sme/logs"
+            mkdir -p "$HOME/.local/sme/run"
+            chmod -R 700 "$HOME/.local/sme"
+            print_step "Created local directories with proper permissions"
+        fi
+    fi
 
     # Set up Python environment if not skipped
     if [ "$skip_python" = false ]; then
