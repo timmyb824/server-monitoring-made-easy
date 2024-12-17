@@ -1,6 +1,6 @@
 """Base monitor class."""
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Any
 
 from app.core.monitor import Monitor as CoreMonitor

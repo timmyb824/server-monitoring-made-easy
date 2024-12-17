@@ -2,7 +2,12 @@ FROM python:3.11-slim
 
 ENV CONTAINER=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    POETRY_VERSION=1.8.5 \
+    POETRY_HOME=/opt/poetry \
+    POETRY_VIRTUALENVS_IN_PROJECT=true \
+    POETRY_NO_INTERACTION=1 \
+    LOGLEVEL=debug
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -10,6 +15,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     iputils-ping \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN pip install "poetry==$POETRY_VERSION"
 
 # Create sme user and directories
 RUN useradd -r -s /bin/false sme && \
@@ -19,23 +27,23 @@ RUN useradd -r -s /bin/false sme && \
 
 # Set up the application
 WORKDIR /app
-COPY requirements.txt .
-RUN python -m venv .venv && \
-    .venv/bin/pip install -r requirements.txt
 
-ENV PATH="/app/.venv/bin:$PATH"
+# Copy only dependencies first
+COPY pyproject.toml poetry.lock ./
 
+# Install dependencies
+RUN poetry config virtualenvs.create false \
+    && poetry install --without dev
+
+# Copy application code and Alembic files
 COPY app ./app
+COPY migrations ./migrations
+COPY alembic.ini ./
 
 # Give ping capabilities to non-root user
 RUN setcap cap_net_raw+ep /bin/ping && \
-    # Ensure proper permissions for the sme user
-    chown -R sme:sme /app && \
-    # Make sure the run directory is writable
-    chmod -R 777 /home/sme/run
+    chown -R sme:sme /app
 
-# Switch to sme user
 USER sme
 
-# Run the monitor using the config from the mounted volume
-CMD ["python", "-m", "app.cli", "start", "-c", "/home/sme/config.yaml", "-f"]
+CMD ["python", "-m", "app.cli", "start", "--foreground", "--config", "/home/sme/config.yaml"]

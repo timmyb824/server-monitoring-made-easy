@@ -106,8 +106,11 @@ def setup_logging(config, component=None):
     log_config = config.get("logging", {})
     log_path, _ = get_app_paths(config)
 
-    # Get component-specific log level if provided, otherwise use global level
-    if component and "components" in log_config:
+    # Check environment variable first, then config file
+    env_log_level = os.environ.get("LOGLEVEL", "").upper()
+    if env_log_level:
+        log_level = env_log_level
+    elif component and "components" in log_config:
         log_level = log_config.get("components", {}).get(
             component, log_config.get("level", "INFO")
         )
@@ -119,12 +122,17 @@ def setup_logging(config, component=None):
 
     # Base processors for all outputs
     base_processors = [
+        structlog.stdlib.filter_by_level,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.stdlib.add_log_level,
+        structlog.stdlib.add_logger_name,
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.processors.UnicodeDecoder(),
     ]
 
     # Configure logging handlers
-    handlers = [logging.StreamHandler()]  # Always log to console
+    handlers = [logging.StreamHandler()]
 
     try:
         # Try to create/open log file
@@ -141,76 +149,181 @@ def setup_logging(config, component=None):
         handlers=handlers,
     )
 
-    # Configure structlog
-    processors = [
-        *base_processors,
-        structlog.processors.JSONRenderer(),
-    ]
+    # Set log level for specific loggers
+    logging.getLogger("sqlalchemy.engine").setLevel(log_level)
+    logging.getLogger("alembic").setLevel(log_level)
+
+    # Configure structlog with console and JSON renderers
+    if log_config.get("file") == "stdout":
+        # For stdout, use a more readable format
+        processors = [
+            *base_processors,
+            structlog.processors.dict_tracebacks,
+            structlog.dev.ConsoleRenderer(
+                colors=True, exception_formatter=structlog.dev.plain_traceback
+            ),
+        ]
+    else:
+        # For file output, use JSON format
+        processors = [
+            *base_processors,
+            structlog.processors.dict_tracebacks,
+            structlog.processors.JSONRenderer(),
+        ]
 
     structlog.configure(
         processors=processors,
         wrapper_class=structlog.stdlib.BoundLogger,
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
     )
 
     logger.info(
         "Logging initialized",
         log_path=log_path,
         log_level=log_level,
+        env_log_level=env_log_level,
     )
 
 
 def monitor_loop(config):
     """Main monitoring loop."""
     try:
-        # Create PID file
+        logger.info("Entering monitor loop")
+        logger.info("Creating PID file")
         if not create_pid_file():
             logger.error("Failed to create PID file")
             return
 
         # Set up logging for monitors component
+        logger.info("Setting up monitor logging")
         setup_logging(config, component="monitors")
+        logger.info("Monitor logging setup complete")
 
         # Initialize monitors
         monitors = {}
         monitor_config = config.get("monitors", {})
+        logger.info("Monitor configuration loaded", config=monitor_config)
 
+        logger.info("Starting monitor initialization")
         if monitor_config.get("cpu", {}).get("enabled", True):
-            monitors["cpu"] = CPUMonitor(
-                "cpu", monitor_config.get("cpu", {"threshold": 80})
-            )
+            logger.info("Initializing CPU monitor")
+            try:
+                monitors["cpu"] = CPUMonitor(
+                    "cpu", monitor_config.get("cpu", {"threshold": 80})
+                )
+                logger.info("CPU monitor initialized")
+            except Exception as e:
+                logger.error(
+                    "Failed to initialize CPU monitor", error=str(e), exc_info=True
+                )
 
         if monitor_config.get("memory", {}).get("enabled", True):
-            monitors["memory"] = MemoryMonitor(
-                "memory", monitor_config.get("memory", {"threshold": 80})
-            )
+            logger.info("Initializing Memory monitor")
+            try:
+                monitors["memory"] = MemoryMonitor(
+                    "memory", monitor_config.get("memory", {"threshold": 80})
+                )
+                logger.info("Memory monitor initialized")
+            except Exception as e:
+                logger.error(
+                    "Failed to initialize Memory monitor", error=str(e), exc_info=True
+                )
 
         if monitor_config.get("disk", {}).get("enabled", True):
-            monitors["disk"] = DiskMonitor(
-                "disk", monitor_config.get("disk", {"threshold": 85})
-            )
+            logger.info("Initializing Disk monitor")
+            try:
+                monitors["disk"] = DiskMonitor(
+                    "disk", monitor_config.get("disk", {"threshold": 85})
+                )
+                logger.info("Disk monitor initialized")
+            except Exception as e:
+                logger.error(
+                    "Failed to initialize Disk monitor", error=str(e), exc_info=True
+                )
 
         if monitor_config.get("ping", {}).get("enabled", True):
-            monitors["ping"] = PingMonitor(
-                "ping", monitor_config.get("ping", {"threshold": 200})
-            )
+            logger.info("Initializing Ping monitor")
+            try:
+                monitors["ping"] = PingMonitor(
+                    "ping", monitor_config.get("ping", {"threshold": 200})
+                )
+                logger.info("Ping monitor initialized")
+            except Exception as e:
+                logger.error(
+                    "Failed to initialize Ping monitor", error=str(e), exc_info=True
+                )
+
+        if not monitors:
+            logger.error("No monitors enabled")
+            return
 
         # Initialize alert manager
-        alert_manager = AlertManager(config)
+        alert_manager = None
+        try:
+            logger.info("Starting alert manager initialization")
+            logger.debug("Alert manager config", config=config)
+            alert_manager = AlertManager(config)
+            logger.info("Alert manager initialized successfully")
+        except Exception as e:
+            logger.error(
+                "Failed to initialize alert manager", error=str(e), exc_info=True
+            )
+            return
 
+        logger.info(f"Starting monitoring loop with {len(monitors)} monitors")
+        iteration = 0
         while True:
-            for monitor in monitors.values():
-                if monitor.should_check():
-                    if alert := monitor.check():
-                        alert_manager.process_alert(alert)
-            time.sleep(1)
+            try:
+                iteration += 1
+                logger.debug(f"Starting iteration {iteration} of monitoring loop")
+                for monitor_name, monitor in monitors.items():
+                    logger.debug(f"Processing {monitor_name} monitor")
+                    try:
+                        if monitor.should_check():
+                            logger.debug(f"Checking {monitor.name}")
+                            try:
+                                value = monitor.collect()
+                                logger.debug(f"{monitor.name} value: {value}")
+                                if alert := monitor.check():
+                                    logger.info(
+                                        f"Alert detected from {monitor.name}",
+                                        alert=alert,
+                                    )
+                                    alert_manager.process_alert(alert)
+                            except Exception as e:
+                                logger.error(
+                                    f"Error checking {monitor.name}",
+                                    error=str(e),
+                                    exc_info=True,
+                                )
+                        else:
+                            logger.debug(
+                                f"Skipping {monitor.name}, not time to check yet"
+                            )
+                    except Exception as e:
+                        logger.error(
+                            f"Error processing {monitor.name}",
+                            error=str(e),
+                            exc_info=True,
+                        )
+                        continue
+                logger.debug(f"Completed iteration {iteration}, sleeping for 1 second")
+                time.sleep(1)
+            except Exception as e:
+                logger.error(
+                    "Error in monitoring loop iteration", error=str(e), exc_info=True
+                )
+                time.sleep(1)  # Prevent tight error loop
 
     except KeyboardInterrupt:
         logger.info("Monitoring stopped by user")
     except Exception as e:
-        logger.error("Monitoring loop failed", error=str(e))
+        logger.error("Monitoring loop failed", error=str(e), exc_info=True)
+        raise
     finally:
+        logger.info("Exiting monitor loop")
         remove_pid_file()
 
 
@@ -229,55 +342,111 @@ def cli():
 )
 def start(config: Optional[str], foreground: bool):
     """Start the monitoring daemon."""
-    config_manager = ConfigManager(config)
+    try:
+        logger.info("Starting server monitoring process")
+        config_manager = ConfigManager(config)
+        logger.info("Config manager initialized")
 
-    if not config_manager.validate_config():
-        click.echo("Invalid configuration. Please check your config file.")
-        sys.exit(1)
-
-    click.echo("Starting server monitoring...")
-
-    if foreground:
-        monitor_loop(config_manager.get_config())
-    else:
-        # Get paths from config
-        log_path, pid_path = get_app_paths(config_manager.get_config())
-
-        # Create directories if they don't exist
-        for path in [log_path, pid_path]:
-            directory = os.path.dirname(path)
-            if not os.path.exists(directory):
-                try:
-                    os.makedirs(directory, mode=0o755, exist_ok=True)
-                    if os.getuid() != 0:  # If not root
-                        os.chown(directory, os.getuid(), os.getgid())
-                except PermissionError:
-                    click.echo(
-                        f"Error: Cannot create directory {directory}. Please check permissions."
-                    )
-                    sys.exit(1)
-
-        # Create a more permissive daemon context
-        context = daemon.DaemonContext(
-            working_directory=os.getcwd(),
-            umask=0o002,
-            detach_process=True,
-            files_preserve=[],  # Add any file descriptors that need to be preserved
-        )
-
-        # Set up PID file
-        try:
-            context.pidfile = get_pid_file()
-        except Exception as e:
-            click.echo(f"Error setting up PID file: {e}")
+        if not config_manager.validate_config():
+            click.echo("Invalid configuration. Please check your config file.")
             sys.exit(1)
+        logger.info("Config validation successful")
 
-        try:
-            with context:
+        click.echo("Starting server monitoring...")
+
+        # Temporarily bypass database initialization
+        # if config_manager.get_config().get("storage", {}).get("type") == "postgres":
+        #     logger.info("PostgreSQL storage detected, running migrations")
+        #     dsn = config_manager.get_config()["storage"]["dsn"]
+        #     try:
+        #         # Run database migrations
+        #         import alembic.config
+        #         import traceback
+
+        #         logger.info("Running database migrations")
+        #         alembic_cfg = alembic.config.Config("alembic.ini")
+        #         logger.info("Alembic config loaded")
+        #         alembic_cfg.set_main_option("sqlalchemy.url", dsn)
+        #         logger.info("Database URL configured")
+
+        #         try:
+        #             alembic.command.upgrade(alembic_cfg, "head")
+        #             logger.info("Database migrations completed successfully")
+        #         except Exception as e:
+        #             logger.error("Migration failed", error=str(e), traceback=traceback.format_exc())
+        #             sys.exit(1)
+
+        #         # Test database connection after migrations
+        #         logger.info("Testing database connection after migrations")
+        #         from sqlalchemy import create_engine, text
+        #         engine = create_engine(dsn)
+        #         with engine.connect() as conn:
+        #             conn.execute(text("SELECT 1"))
+        #             conn.commit()
+        #         logger.info("Database connection test successful")
+
+        #     except Exception as e:
+        #         logger.error("Database setup failed", error=str(e), traceback=traceback.format_exc())
+        #         sys.exit(1)
+
+        if foreground:
+            logger.info("Starting monitor loop in foreground mode")
+            try:
                 monitor_loop(config_manager.get_config())
-        except Exception as e:
-            click.echo(f"Failed to start daemon: {e}")
-            sys.exit(1)
+            except Exception as e:
+                logger.error(
+                    "Monitor loop failed to start",
+                    error=str(e),
+                    traceback=traceback.format_exc(),
+                )
+                sys.exit(1)
+        else:
+            logger.info("Starting monitor loop in daemon mode")
+            # Get paths from config
+            log_path, pid_path = get_app_paths(config_manager.get_config())
+
+            # Create directories if they don't exist
+            for path in [log_path, pid_path]:
+                directory = os.path.dirname(path)
+                if not os.path.exists(directory):
+                    try:
+                        os.makedirs(directory, mode=0o755, exist_ok=True)
+                        if os.getuid() != 0:
+                            os.chown(directory, os.getuid(), os.getgid())
+                    except PermissionError:
+                        click.echo(
+                            f"Error: Cannot create directory {directory}. Please check permissions."
+                        )
+                        sys.exit(1)
+
+            # Create a more permissive daemon context
+            context = daemon.DaemonContext(
+                working_directory=os.getcwd(),
+                umask=0o002,
+                detach_process=True,
+                files_preserve=[],
+            )
+
+            # Set up PID file
+            try:
+                context.pidfile = get_pid_file()
+            except Exception as e:
+                click.echo(f"Error setting up PID file: {e}")
+                sys.exit(1)
+
+            try:
+                with context:
+                    monitor_loop(config_manager.get_config())
+            except Exception as e:
+                logger.error(
+                    "Failed to start daemon",
+                    error=str(e),
+                    traceback=traceback.format_exc(),
+                )
+                sys.exit(1)
+    except Exception as e:
+        logger.error("Startup failed", error=str(e), traceback=traceback.format_exc())
+        sys.exit(1)
 
 
 @cli.command()
@@ -286,7 +455,7 @@ def stop():
     try:
         with open(get_pid_file(), "r", encoding="utf-8") as f:
             pid = int(f.read().strip())
-        os.kill(pid, 15)  # SIGTERM
+        os.kill(pid, 15)
         click.echo("Stopped server monitoring.")
     except FileNotFoundError:
         click.echo("Server monitor is not running.")
@@ -304,7 +473,7 @@ def status():
         with open(get_pid_file(), "r", encoding="utf-8") as f:
             pid = int(f.read().strip())
         try:
-            os.kill(pid, 0)  # Check if process exists
+            os.kill(pid, 0)
             click.echo("Server monitor is running.")
         except ProcessLookupError:
             click.echo("Server monitor is not running.")
@@ -451,6 +620,10 @@ def init(path: str, no_log_file: bool):
                 "daemon": "info",
             },
         },
+        "storage": {
+            "type": "postgres",
+            "dsn": "postgresql://user:password@localhost:5432/monitoring",
+        },
         "monitors": {
             "cpu": {
                 "enabled": True,
@@ -492,12 +665,12 @@ def init(path: str, no_log_file: bool):
 
     # Add paths configuration if log file is desired
     if not no_log_file:
-        if os.getuid() == 0:  # Root user
+        if os.getuid() == 0:
             default_config["paths"] = {
                 "log_file": "/var/log/sme/server-monitor.log",
                 "pid_file": "/var/run/sme/server-monitor.pid",
             }
-        else:  # Non-root user
+        else:
             default_config["paths"] = {
                 "log_file": "~/.local/log/sme/server-monitor.log",
                 "pid_file": "~/.local/run/sme/server-monitor.pid",

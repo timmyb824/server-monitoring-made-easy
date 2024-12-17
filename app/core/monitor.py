@@ -66,7 +66,20 @@ class Monitor(ABC):
 
     def should_check(self) -> bool:
         """Determine if it's time to check the metric again."""
-        return time.time() - self.last_check >= self.interval
+        current_time = time.time()
+        time_since_last = current_time - self.last_check
+        should_check = time_since_last >= self.interval
+
+        if not self.silent:
+            self.logger.debug(
+                "Check timing",
+                current_time=current_time,
+                last_check=self.last_check,
+                time_since_last=time_since_last,
+                interval=self.interval,
+                should_check=should_check,
+            )
+        return should_check
 
     def check(self) -> Optional[dict[str, Any]]:
         """Perform the monitoring check.
@@ -75,9 +88,13 @@ class Monitor(ABC):
             Alert dictionary if threshold is exceeded, None otherwise
         """
         if not self.enabled:
+            if not self.silent:
+                self.logger.debug("Monitor is disabled")
             return None
 
         if not self.should_check():
+            if not self.silent:
+                self.logger.debug("Not time to check yet")
             return None
 
         try:
@@ -86,9 +103,11 @@ class Monitor(ABC):
             self.last_value = value
 
             if not self.silent:
-                # Log every check, not just alerts
                 self.logger.info(
-                    "Metric collected", value=value, threshold=self.threshold
+                    "Metric collected",
+                    value=value,
+                    threshold=self.threshold,
+                    consecutive_failures=self.consecutive_failures,
                 )
 
             if self.check_threshold(value):
@@ -111,22 +130,28 @@ class Monitor(ABC):
                             "timestamp": self.last_check,
                             "consecutive_failures": self.consecutive_failures,
                         }
-                else:
-                    if not self.silent:
-                        self.logger.info(
-                            "Threshold exceeded but under alert count",
-                            value=value,
-                            threshold=self.threshold,
-                            failures=self.consecutive_failures,
-                            required=self.alert_count,
-                        )
+                elif not self.silent:
+                    self.logger.info(
+                        "Threshold exceeded but under alert count",
+                        value=value,
+                        threshold=self.threshold,
+                        failures=self.consecutive_failures,
+                        required=self.alert_count,
+                    )
             else:
+                if self.consecutive_failures > 0 and not self.silent:
+                    self.logger.info(
+                        "Resetting consecutive failures",
+                        old_failures=self.consecutive_failures,
+                    )
                 self.consecutive_failures = 0
                 if self.alert_state == "FIRING":
                     self.alert_state = "OK"
                     if not self.silent:
                         self.logger.info(
-                            "Alert resolved", value=value, threshold=self.threshold
+                            "Alert resolved",
+                            value=value,
+                            threshold=self.threshold,
                         )
                     return {
                         "monitor": self.name,
@@ -138,7 +163,11 @@ class Monitor(ABC):
 
         except Exception as e:
             if not self.silent:
-                self.logger.error("Error collecting metric", error=str(e))
+                self.logger.error(
+                    "Error collecting metric",
+                    error=str(e),
+                    exc_info=True,
+                )
             return {
                 "monitor": self.name,
                 "state": "ERROR",
