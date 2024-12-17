@@ -37,8 +37,6 @@ RUN poetry config virtualenvs.create false \
 
 # Copy application code and Alembic files
 COPY app ./app
-COPY migrations ./migrations
-COPY alembic.ini ./
 
 # Give ping capabilities to non-root user
 RUN setcap cap_net_raw+ep /bin/ping && \

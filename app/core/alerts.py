@@ -6,9 +6,7 @@ from datetime import datetime
 
 import apprise
 import structlog
-from sqlalchemy.exc import SQLAlchemyError
 
-from app.core.storage import AlertStorage
 from app.core.storage_file import FileAlertStorage
 from app.core.storage_postgres import PostgresAlertStorage
 
@@ -51,20 +49,16 @@ class AlertManager:
                 try:
                     self.storage = PostgresAlertStorage(dsn)
                     self.logger.debug("PostgreSQL storage initialized successfully")
-                except SQLAlchemyError as e:
-                    self.logger.error(
-                        "Failed to initialize PostgreSQL storage",
-                        error=str(e),
-                        exc_info=True,
-                    )
-                    raise
                 except Exception as e:
-                    self.logger.error(
-                        "Unexpected error initializing storage",
+                    self.logger.warning(
+                        "Failed to initialize PostgreSQL storage, falling back to file storage",
                         error=str(e),
                         exc_info=True,
                     )
-                    raise
+                    # Fall back to file storage
+                    file_path = "/home/sme/data/alerts.json"  # Default fallback path
+                    self.logger.info(f"Using fallback file storage at {file_path}")
+                    self.storage = FileAlertStorage(file_path)
             elif storage_type == "file":
                 file_path = storage_config.get("file_path")
                 if not file_path:
@@ -104,13 +98,16 @@ class AlertManager:
                 active_alerts = self.storage.get_active_alerts()
                 for alert in active_alerts:
                     try:
-                        self.active_alerts[alert["monitor"]] = alert
-                        self.logger.debug(
-                            "Added alert to active alerts", monitor=alert["monitor"]
-                        )
-                    except KeyError as e:
+                        if isinstance(alert, dict) and "monitor" in alert:
+                            self.active_alerts[alert["monitor"]] = alert
+                            self.logger.debug(
+                                "Added alert to active alerts", monitor=alert["monitor"]
+                            )
+                        else:
+                            self.logger.warning("Invalid alert format", alert=alert)
+                    except Exception as e:
                         self.logger.error(
-                            "Invalid alert format", alert=alert, error=str(e)
+                            "Error processing alert", alert=alert, error=str(e)
                         )
                         continue
                 self.logger.info(
@@ -120,7 +117,8 @@ class AlertManager:
                 self.logger.error(
                     "Failed to load active alerts", error=str(e), exc_info=True
                 )
-                raise
+                # Continue without active alerts
+                self.active_alerts = {}
 
             self.logger.info("AlertManager initialization complete")
 

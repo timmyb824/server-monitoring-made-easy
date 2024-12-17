@@ -2,15 +2,15 @@
 
 import time
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 import structlog
-from sqlalchemy import and_, create_engine, or_, text
+from sqlalchemy import and_, create_engine, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import NullPool
 
 from app.core.storage import AlertStorage
-from app.db import get_session, init_db
 from app.models import Alert
 
 logger = structlog.get_logger()
@@ -27,24 +27,26 @@ class PostgresAlertStorage(AlertStorage):
         """
         self.dsn = dsn
         self.logger = logger.bind(component="PostgresAlertStorage")
+        self._engine = None
         self._Session = None
 
-        # Try to initialize the database with retries
+        # Try to initialize the database connection
         max_retries = 5
         retry_delay = 5  # seconds
 
         for attempt in range(max_retries):
             try:
-                # Test the connection first
-                engine = create_engine(dsn)
-                with engine.connect() as conn:
+                # Create engine with NullPool to prevent connection pooling issues
+                self._engine = create_engine(dsn, poolclass=NullPool)
+
+                # Test the connection
+                with self._engine.connect() as conn:
                     conn.execute(text("SELECT 1"))
                     conn.commit()
 
-                # If connection successful, initialize the database
-                init_db(dsn)
-                self._Session = sessionmaker(bind=engine)
-                self.logger.info("Database connection and initialization successful")
+                # Set up session maker
+                self._Session = sessionmaker(bind=self._engine)
+                self.logger.info("Database connection successful")
                 break
 
             except OperationalError as e:
@@ -62,14 +64,18 @@ class PostgresAlertStorage(AlertStorage):
                     )
                     raise
             except Exception as e:
-                self.logger.error("Failed to initialize database", error=str(e))
+                self.logger.error(
+                    "Failed to initialize database connection", error=str(e)
+                )
+                if self._engine:
+                    self._engine.dispose()
                 raise
 
     def _get_session(self) -> Session:
         """Get a new database session."""
         if self._Session is None:
-            engine = create_engine(self.dsn)
-            self._Session = sessionmaker(bind=engine)
+            self._engine = create_engine(self.dsn, poolclass=NullPool)
+            self._Session = sessionmaker(bind=self._engine)
         return self._Session()
 
     def save_alert(self, alert_data: dict) -> None:
@@ -91,7 +97,6 @@ class PostgresAlertStorage(AlertStorage):
             self.logger.error("Failed to save alert", error=str(e), exc_info=True)
             if session:
                 session.rollback()
-            raise
         finally:
             if session:
                 session.close()
@@ -121,58 +126,51 @@ class PostgresAlertStorage(AlertStorage):
             self.logger.error("Failed to resolve alert", error=str(e), exc_info=True)
             if session:
                 session.rollback()
-            raise
         finally:
             if session:
                 session.close()
 
-    def get_active_alerts(self) -> List[dict]:
-        """Get all currently active alerts."""
+    def get_active_alerts(self) -> list[dict]:
+        """Get list of currently active alerts.
+
+        Returns:
+            List of active alert dictionaries
+        """
         session = None
         try:
-            self.logger.debug("Creating new session for active alerts query")
             session = self._get_session()
-
-            self.logger.debug("Executing active alerts query")
-            alerts = session.query(Alert).filter(Alert.resolved_at.is_(None)).all()
-            self.logger.debug(f"Found {len(alerts)} active alerts")
-
-            # Convert alerts to dictionaries
-            alert_list = []
-            for alert in alerts:
-                try:
-                    alert_dict = alert.details
-                    alert_list.append(alert_dict)
-                    self.logger.debug("Processed alert", alert_id=alert.id)
-                except Exception as e:
-                    self.logger.error(
-                        "Failed to process alert details",
-                        alert_id=getattr(alert, "id", "unknown"),
-                        error=str(e),
-                    )
-
-            self.logger.debug(f"Successfully processed {len(alert_list)} alerts")
-            return alert_list
-
+            alerts = (
+                session.query(Alert)
+                .filter(Alert.resolved_at.is_(None))
+                .order_by(Alert.created_at.desc())
+                .all()
+            )
+            return [
+                {
+                    "id": alert.id,
+                    "hostname": alert.hostname,
+                    "monitor": alert.monitor_name,
+                    "state": alert.alert_state,
+                    "details": alert.details,
+                    "timestamp": alert.created_at.timestamp(),
+                }
+                for alert in alerts
+            ]
         except Exception as e:
             self.logger.error(
                 "Failed to get active alerts", error=str(e), exc_info=True
             )
-            return []
+            return []  # Return empty list on error
         finally:
             if session:
-                try:
-                    session.close()
-                    self.logger.debug("Database session closed")
-                except Exception as e:
-                    self.logger.error("Error closing database session", error=str(e))
+                session.close()
 
     def get_alert_history(
         self,
         monitor_name: Optional[str] = None,
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
-    ) -> List[dict]:
+    ) -> list[dict]:
         """Get alert history with optional filters."""
         session = None
         try:
@@ -191,12 +189,27 @@ class PostgresAlertStorage(AlertStorage):
             query = query.order_by(Alert.created_at.desc())
 
             alerts = query.all()
-            return [alert.details for alert in alerts]
+            return [
+                {
+                    "id": alert.id,
+                    "hostname": alert.hostname,
+                    "monitor": alert.monitor_name,
+                    "state": alert.alert_state,
+                    "details": alert.details,
+                    "timestamp": alert.created_at.timestamp(),
+                }
+                for alert in alerts
+            ]
         except Exception as e:
             self.logger.error(
                 "Failed to get alert history", error=str(e), exc_info=True
             )
-            return []
+            return []  # Return empty list on error
         finally:
             if session:
                 session.close()
+
+    def __del__(self):
+        """Clean up database connections."""
+        if self._engine:
+            self._engine.dispose()
