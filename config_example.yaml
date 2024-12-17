@@ -51,27 +51,26 @@ monitors:
       - "1.1.1.1"
       - "google.com"
 
+# Storage configuration
+storage:
+  # Available storage types: postgres
+  type: file # can be 'file' or 'postgres'
+  file_path: /path/to/alerts.json # for file storage
+  # dsn: postgresql://user:pass@localhost:5432/dbname  # for postgres storage
+  pruning:
+    enabled: true
+    max_age_days: 30 # Keep alerts for 30 days
+    max_alerts: 1000 # Maximum number of alerts to keep in history
+
 # Alert configuration
 alerts:
+  # Enable or disable alerts globally
   enabled: true
+  # Alert notification methods
   methods:
-    - type: "console" # Built-in console alerts
+    # Console notifications
+    - type: console
       enabled: true
-
-    # Uncomment and configure for email alerts
-    # - type: "email"
-    #   enabled: false
-    #   smtp_server: "smtp.gmail.com"
-    #   smtp_port: 587
-    #   username: "your-email@gmail.com"
-    #   password: "your-app-specific-password"
-    #   from_addr: "your-email@gmail.com"
-    #   to_addr: "recipient@example.com"
-
-    # Uncomment and configure for Slack alerts
-    # - type: "slack"
-    #   enabled: false
-    #   webhook_url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
 
 # Configure your notification channels here
 notifications:

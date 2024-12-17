@@ -5,9 +5,10 @@ services:
     build: .
     volumes:
       - ./config.yaml:/home/sme/config.yaml:ro
+      - ./data:/home/sme/data
       - ./logs:/home/sme/logs
       - ./run:/home/sme/run
-      - /proc:/host/proc:ro  # Mount host's proc directory read-only
+      - /proc:/host/proc:ro # Mount host's proc directory read-only
     pid: "host" # Needed for accurate system metrics
     privileged: true # Needed for system metrics access
     network_mode: "host" # Needed for accurate network metrics
@@ -20,4 +21,4 @@ services:
     environment:
       - CONTAINER=1
       - PYTHONUNBUFFERED=1
-      - LOG_LEVEL=debug
+      - LOGLEVEL=debug
