@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 import time
+import traceback
 from typing import Optional
 
 import click
@@ -354,40 +355,30 @@ def start(config: Optional[str], foreground: bool):
 
         click.echo("Starting server monitoring...")
 
-        # Temporarily bypass database initialization
-        # if config_manager.get_config().get("storage", {}).get("type") == "postgres":
-        #     logger.info("PostgreSQL storage detected, running migrations")
-        #     dsn = config_manager.get_config()["storage"]["dsn"]
-        #     try:
-        #         # Run database migrations
-        #         import alembic.config
-        #         import traceback
+        # Initialize storage backend
+        storage_config = config_manager.get_config().get("storage", {})
+        if storage_config.get("type") == "postgres":
+            logger.info("PostgreSQL storage detected")
+            dsn = storage_config.get("dsn")
+            if not dsn:
+                logger.error("PostgreSQL DSN not configured")
+                sys.exit(1)
 
-        #         logger.info("Running database migrations")
-        #         alembic_cfg = alembic.config.Config("alembic.ini")
-        #         logger.info("Alembic config loaded")
-        #         alembic_cfg.set_main_option("sqlalchemy.url", dsn)
-        #         logger.info("Database URL configured")
+            try:
+                # Initialize database
+                from app.db import init_db
 
-        #         try:
-        #             alembic.command.upgrade(alembic_cfg, "head")
-        #             logger.info("Database migrations completed successfully")
-        #         except Exception as e:
-        #             logger.error("Migration failed", error=str(e), traceback=traceback.format_exc())
-        #             sys.exit(1)
+                db_success, db_error = init_db(dsn)
 
-        #         # Test database connection after migrations
-        #         logger.info("Testing database connection after migrations")
-        #         from sqlalchemy import create_engine, text
-        #         engine = create_engine(dsn)
-        #         with engine.connect() as conn:
-        #             conn.execute(text("SELECT 1"))
-        #             conn.commit()
-        #         logger.info("Database connection test successful")
-
-        #     except Exception as e:
-        #         logger.error("Database setup failed", error=str(e), traceback=traceback.format_exc())
-        #         sys.exit(1)
+                if not db_success:
+                    logger.warning(
+                        "Database initialization failed, continuing without database",
+                        error=db_error,
+                    )
+            except Exception as e:
+                logger.warning(
+                    "Database setup failed, continuing without database", error=str(e)
+                )
 
         if foreground:
             logger.info("Starting monitor loop in foreground mode")
