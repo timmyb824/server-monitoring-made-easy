@@ -423,12 +423,18 @@ def start(config: Optional[str], foreground: bool):
                         )
                         sys.exit(1)
 
+            # Set up logging before daemonizing
+            setup_logging(config_manager.get_config())
+
+            # Open log file before daemonizing
+            log_file = open(log_path, "a")
+
             # Create a more permissive daemon context
             context = daemon.DaemonContext(
-                working_directory=os.getcwd(),
+                working_directory="/",  # Use root directory to avoid path issues
                 umask=0o002,
                 detach_process=True,
-                files_preserve=[],
+                files_preserve=[log_file],
             )
 
             # Set up PID file
@@ -440,6 +446,11 @@ def start(config: Optional[str], foreground: bool):
 
             try:
                 with context:
+                    # Redirect stdout/stderr to log file
+                    sys.stdout = log_file
+                    sys.stderr = log_file
+
+                    # Run the monitor loop
                     monitor_loop(config_manager.get_config())
             except Exception as e:
                 logger.error(
@@ -448,6 +459,8 @@ def start(config: Optional[str], foreground: bool):
                     traceback=traceback.format_exc(),
                 )
                 sys.exit(1)
+            finally:
+                log_file.close()
     except Exception as e:
         logger.error("Startup failed", error=str(e), traceback=traceback.format_exc())
         sys.exit(1)

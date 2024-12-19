@@ -76,6 +76,16 @@ DEFAULT_CONFIG_LOCATIONS = [
 ]
 
 
+def _expand_paths(config: dict) -> dict:
+    """Expand all path values in the configuration."""
+    for key, value in config.items():
+        if isinstance(value, dict):
+            config[key] = _expand_paths(value)
+        elif isinstance(value, str) and os.path.exists(os.path.expanduser(value)):
+            config[key] = os.path.expanduser(value)
+    return config
+
+
 class ConfigManager:
     """Manages application configuration."""
 
@@ -150,6 +160,7 @@ class ConfigManager:
 
             if file_config:
                 self._merge_config(self.config, file_config)
+                self.config = _expand_paths(self.config)
 
             # Set up logging based on loaded config
             log_config = self.config.get("logging", {})
