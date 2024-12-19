@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.1.1 (2024-12-19)
+
+### Documentation
+
+- Update readme to relect current state
+  ([`3774547`](https://github.com/timmyb824/server-monitoring-made-easy/commit/3774547b97688f0e9115050804d13a26dea2e65f))
+
+### Refactoring
+
+- Expand all path values in the configuration before merging them with the loaded file config
+  ([`d315ecc`](https://github.com/timmyb824/server-monitoring-made-easy/commit/d315ecc72268aace7972b31bbe5601edde8a8432))
+
+
 ## v0.1.0 (2024-12-19)
 
 ### Bug Fixes
