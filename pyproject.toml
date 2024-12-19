@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "server-monitoring-made-easy"
-version = "0.0.1"
+version = "0.1.0"
 description = "Simple and effective server monitoring with easy configuration and multiple notification options"
 authors = ["Tim Bryant <timothybryant3@gmail.com>"]
 readme = "README.md"
