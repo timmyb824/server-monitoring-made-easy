@@ -19,6 +19,7 @@ from app.config import ConfigManager
 from app.core.alerts import AlertManager
 from app.monitors import CPUMonitor, DiskMonitor, MemoryMonitor, PingMonitor
 
+console = Console()
 logger = structlog.get_logger()
 
 
@@ -332,6 +333,18 @@ def monitor_loop(config):
 def cli():
     """Server Monitoring Made Easy - Simple and effective server monitoring."""
     pass
+
+
+@cli.command("version", help="Show version information")
+def show_version():
+    """Show version information."""
+    try:
+        from importlib.metadata import version
+
+        sme_version = version("server-monitoring-made-easy")
+        console.print(f"[blue]Server Monitoring Made Easy version {sme_version}[/blue]")
+    except ImportError:
+        console.print("[red]Error: Could not determine version[/red]")
 
 
 @cli.command()
