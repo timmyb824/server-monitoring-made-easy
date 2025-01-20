@@ -3,6 +3,8 @@
 import socket
 import time
 from datetime import datetime
+import os
+from pathlib import Path
 
 import apprise
 import structlog
@@ -55,8 +57,11 @@ class AlertManager:
                         error=str(e),
                         exc_info=True,
                     )
-                    # Fall back to file storage
-                    file_path = "/home/sme/data/alerts.json"  # Default fallback path
+                    # Fall back to file storage using XDG base directory spec
+                    data_home = os.environ.get(
+                        "XDG_DATA_HOME", os.path.expanduser("~/.local/share")
+                    )
+                    file_path = os.path.join(data_home, "sme", "alerts.json")
                     self.logger.info(f"Using fallback file storage at {file_path}")
                     self.storage = FileAlertStorage(file_path)
             elif storage_type == "file":
@@ -164,16 +169,29 @@ class AlertManager:
                 )
 
     def _build_notification_url(self, notification):
-        """Build Apprise URL for notification channel."""
+        """Build Apprise URL for notification channel.
+
+        Args:
+            notification: Dictionary containing notification configuration
+                Required keys:
+                - type: The notification service type
+                - uri: The service-specific URI following Apprise's schema
+
+        Returns:
+            str: The complete Apprise URL for the notification service
+
+        Raises:
+            ValueError: If required configuration is missing
+        """
         notification_type = notification.get("type")
-        if notification_type == "telegram":
-            token = notification.get("token")
-            chat_id = notification.get("chat_id")
-            if not token or not chat_id:
-                raise ValueError("Telegram notifications require token and chat_id")
-            return f"tgram://{token}/{chat_id}"
-        # Add other notification types here
-        raise ValueError(f"Unsupported notification type: {notification_type}")
+        uri = notification.get("uri")
+
+        if not notification_type or not uri:
+            raise ValueError(
+                "Notification configuration must include both 'type' and 'uri'"
+            )
+
+        return uri
 
     def process_alert(self, alert):
         """Process an alert from a monitor."""
