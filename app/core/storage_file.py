@@ -22,21 +22,45 @@ class FileAlertStorage(AlertStorage):
         Args:
             file_path: Path to the JSON file for storing alerts
             pruning_config: Optional configuration for alert pruning
+
+        Raises:
+            OSError: If the storage directory cannot be created or accessed
         """
         self.logger = logger.bind(component="FileAlertStorage")
-        self.file_path = file_path
-        self.data_dir = os.path.dirname(file_path)
+        self.file_path = os.path.expanduser(file_path)  # Expand ~ if present
+        self.data_dir = os.path.dirname(self.file_path)
         self.pruning_config = pruning_config or {}
 
         # Create directory if it doesn't exist
-        if not os.path.exists(self.data_dir):
-            os.makedirs(self.data_dir, mode=0o755, exist_ok=True)
+        try:
+            if not os.path.exists(self.data_dir):
+                os.makedirs(self.data_dir, mode=0o755, exist_ok=True)
+            # Verify we can write to the directory
+            if not os.access(self.data_dir, os.W_OK):
+                raise OSError(f"No write permission for directory: {self.data_dir}")
+        except Exception as e:
+            self.logger.error(
+                "Failed to create/access storage directory",
+                directory=self.data_dir,
+                error=str(e),
+            )
+            raise OSError(
+                f"Cannot create/access storage directory {self.data_dir}: {str(e)}"
+            ) from e
 
         # Initialize storage file if it doesn't exist
-        if not os.path.exists(file_path):
-            self._write_data({"active_alerts": {}, "alert_history": []})
+        try:
+            if not os.path.exists(self.file_path):
+                self._write_data({"active_alerts": {}, "alert_history": []})
+        except Exception as e:
+            self.logger.error(
+                "Failed to initialize storage file", file=self.file_path, error=str(e)
+            )
+            raise OSError(
+                f"Cannot initialize storage file {self.file_path}: {str(e)}"
+            ) from e
 
-        self.logger.info("File storage initialized", file_path=file_path)
+        self.logger.info("File storage initialized", file_path=self.file_path)
 
     def _read_data(self) -> dict:
         """Read data from storage file."""
