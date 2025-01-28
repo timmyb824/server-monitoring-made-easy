@@ -1,6 +1,6 @@
 [project]
 name = "server-monitoring-made-easy"
-version = "0.1.1"
+dynamic = ["version"]
 description = "Simple and effective server monitoring with easy configuration and multiple notification options"
 authors = [{ name = "Timothy Bryant", email = "timothybryant3@gmail.com" }]
 readme = "README.md"
@@ -20,6 +20,10 @@ dependencies = [
     "alembic>=1.13.1",
     "psycopg2-binary>=2.9.9",
 ]
+
+[tool.poetry]
+version = "0.1.1"
+packages = [{ include = "app", from = "." }]
 
 [tool.poetry.group.dev.dependencies]
 autopep8 = "^2.3.1"
