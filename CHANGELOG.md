@@ -1,6 +1,27 @@
 # CHANGELOG
 
 
+## v0.1.2 (2025-01-29)
+
+### Bug Fixes
+
+- Fix handling of file path expansion and directory creation in FileAlertStorage
+  ([`6ce4f5d`](https://github.com/timmyb824/server-monitoring-made-easy/commit/6ce4f5dbbd9d4410b966db3343c4e1f54c4bcacb))
+
+- Issue preventing package from being built; added tools.poetry section back as its still supported;
+  fixed dynamic versioning.
+  ([`d0bce88`](https://github.com/timmyb824/server-monitoring-made-easy/commit/d0bce88d048703cc8bb55e375e06d8f0b918e861))
+
+- Remove telegram hardcode and allow any notification type
+  ([`acbca14`](https://github.com/timmyb824/server-monitoring-made-easy/commit/acbca143830d7194470d827382ceb066b752197b))
+
+- Update dependencies to use Poetry 2.0.0 and Python 3.9 as required-python
+  ([`814f488`](https://github.com/timmyb824/server-monitoring-made-easy/commit/814f488efc0d869eb4215932774652c02202232e))
+
+- Update poetry version to 2.0.0
+  ([`f3deae2`](https://github.com/timmyb824/server-monitoring-made-easy/commit/f3deae2669a072901be9217819c6b3c802ed2d32))
+
+
 ## v0.1.1 (2024-12-19)
 
 ### Documentation
