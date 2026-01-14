@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.3 (2026-01-14)
+
+### Chores
+
+- Update volume permissions
+  ([`ebc07d3`](https://github.com/timmyb824/server-monitoring-made-easy/commit/ebc07d3de5f5e08ff87668657cef8a57732d9451))
+
+
 ## v0.1.2 (2025-01-29)
 
 ### Bug Fixes
