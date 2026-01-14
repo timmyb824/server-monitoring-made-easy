@@ -4,7 +4,7 @@ services:
   monitor:
     build: .
     volumes:
-      - ./config.yaml:/home/sme/config.yaml:ro
+      - ./config.yaml:/home/sme/config.yaml:Z
       - ./data:/home/sme/data
       - ./logs:/home/sme/logs
       - ./run:/home/sme/run
